@@ -38,8 +38,14 @@ gh release create "$TAG" \
     --title "Undertow ${TAG}" \
     --notes "## Undertow ${TAG}
 
+### One-Line Install (Linux)
+\`\`\`bash
+curl -fsSL https://raw.githubusercontent.com/${REPO}/main/setup.sh | sudo bash
+\`\`\`
+Auto-detects architecture, downloads, installs, and starts the service.
+
 ### Downloads
-Each zip contains: \`client\`, \`server\`, \`admin\` binaries + example configs + README.
+Each zip contains: \`admin\`, \`server\`, \`client\` binaries + \`clients/\` directory with all platform client binaries + example configs + install scripts.
 
 ### Platforms
 - **linux-amd64** — x86_64 servers
@@ -51,32 +57,22 @@ Each zip contains: \`client\`, \`server\`, \`admin\` binaries + example configs 
 - **windows-amd64** — Windows x64
 - **windows-arm64** — Windows ARM
 
-### Server Install (Linux)
+### Manual Server Install (Linux)
 \`\`\`bash
-# Auto-detect architecture, download, extract, and install
 ARCH=\$(uname -m); case \$ARCH in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; armv7l) ARCH=armv7;; armv6l) ARCH=armv6;; esac
 wget https://github.com/${REPO}/releases/download/${TAG}/undertow-${TAG}-linux-\${ARCH}.zip
 unzip undertow-${TAG}-linux-\${ARCH}.zip
-
-# Move to /opt/undertow
 sudo mv undertow-${TAG}-linux-\${ARCH} /opt/undertow
-cd /opt/undertow
-
-# Run the installer (creates user, configs, systemd service)
-sudo bash install.sh
-
-# Start the service
+cd /opt/undertow && sudo bash install.sh
 sudo systemctl start undertow
-
-# Open the admin panel and follow the setup wizard
-# http://your-server-ip:8090
 \`\`\`
 
 ### Quick Start
-1. Download the zip for your server platform
-2. Extract and run \`./admin\` with an \`admin_config.json\`
-3. Open the web UI and follow the setup wizard
-4. Download client packages from the admin panel
+1. Run the one-line installer or download the zip for your server platform
+2. Open **http://your-server-ip:8090** and log in (default: admin / change-me)
+3. You will be prompted to change the default password on first login
+4. Follow the setup wizard to configure Google Drive credentials
+5. Download ready-to-use client packages from the admin panel (bundles client binary + credentials + config)
 
 See [README](https://github.com/${REPO}#readme) for full instructions." \
     "${ZIPS[@]}"
