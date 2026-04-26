@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/OvaThinka-Net/Undertow/internal/config"
@@ -39,6 +40,20 @@ func main() {
 	flag.StringVar(&configPath, "c", "config.json", "Path to config file")
 	flag.StringVar(&gcPath, "gc", "credentials.json", "Path to Google Service Account JSON")
 	flag.Parse()
+
+	// If config doesn't exist at the given path, try next to the executable
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		if exe, e := os.Executable(); e == nil {
+			alt := filepath.Join(filepath.Dir(exe), configPath)
+			if _, e2 := os.Stat(alt); e2 == nil {
+				configPath = alt
+				// Also resolve credentials relative to exe dir if not absolute
+				if !filepath.IsAbs(gcPath) {
+					gcPath = filepath.Join(filepath.Dir(exe), gcPath)
+				}
+			}
+		}
+	}
 
 	log.Println("Starting Flow Client...")
 	ctx, cancel := context.WithCancel(context.Background())
