@@ -52,6 +52,21 @@ for platform in "${platforms[@]}"; do
     cp client_config.json.example server_config.json.example admin_config.json.example README.md "$OUT/"
     cp install.sh uninstall.sh undertow.service "$OUT/"
 
+    # Build client binaries for all platforms into clients/ subdirectory
+    mkdir -p "$OUT/clients"
+    for cp_platform in "darwin/arm64" "darwin/amd64" "windows/amd64" "windows/arm64" "linux/amd64" "linux/arm64"; do
+        IFS='/' read -r CP_OS CP_ARCH <<< "$cp_platform"
+        CP_SUFFIX=""
+        [[ "$CP_OS" == "windows" ]] && CP_SUFFIX=".exe"
+        if [[ "$CP_OS" == "darwin" || "$CP_OS" == "windows" ]]; then
+            CP_NAME="Undertow-${CP_OS}-${CP_ARCH}${CP_SUFFIX}"
+        else
+            CP_NAME="client-${CP_OS}-${CP_ARCH}"
+        fi
+        CGO_ENABLED=0 GOOS="$CP_OS" GOARCH="$CP_ARCH" \
+            go build -ldflags="-s -w" -trimpath -o "$OUT/clients/$CP_NAME" ./cmd/client
+    done
+
     (cd "$RELEASE_DIR" && zip -qr "${FOLDER}.zip" "$FOLDER")
     rm -rf "$OUT"
 done

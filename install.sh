@@ -80,6 +80,12 @@ fi
 mkdir -p "$DIR/clients"
 mkdir -p "$DIR/logs"
 
+# Copy pre-built client binaries if present in the release
+if [[ -d "$SCRIPT_DIR/clients" ]]; then
+    cp -f "$SCRIPT_DIR/clients/"* "$DIR/clients/" 2>/dev/null && \
+        echo "  [setup] Client binaries installed." || true
+fi
+
 # ---------------------------------------------------------------------------
 # 5. Set ownership
 # ---------------------------------------------------------------------------
