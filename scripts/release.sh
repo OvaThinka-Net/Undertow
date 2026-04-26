@@ -53,10 +53,11 @@ Each zip contains: \`client\`, \`server\`, \`admin\` binaries + example configs 
 
 ### Server Install (Linux)
 \`\`\`bash
-# Download and extract (replace ARCH with your platform, e.g. linux-amd64)
-wget https://github.com/${REPO}/releases/download/${TAG}/undertow-${TAG}-linux-amd64.zip
-unzip undertow-${TAG}-linux-amd64.zip
-cd undertow-${TAG}-linux-amd64
+# Auto-detect architecture, download, extract, and install
+ARCH=\$(uname -m); case \$ARCH in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; armv7l) ARCH=armv7;; armv6l) ARCH=armv6;; esac
+wget https://github.com/${REPO}/releases/download/${TAG}/undertow-${TAG}-linux-\${ARCH}.zip
+unzip undertow-${TAG}-linux-\${ARCH}.zip
+cd undertow-${TAG}-linux-\${ARCH}
 
 # Run the installer (creates user, configs, systemd service)
 sudo bash install.sh
