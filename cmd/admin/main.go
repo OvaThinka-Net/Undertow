@@ -54,12 +54,14 @@ func loadConfig(path string) AdminConfig {
 	var cfg AdminConfig
 	json.Unmarshal(defaultConfigJSON, &cfg)
 
-	// Try explicit path first, then config.json next to binary, then CWD
+	// Try explicit path first, then admin_config.json / config.json next to binary, then CWD
 	paths := []string{path}
 	if exe, err := os.Executable(); err == nil {
-		paths = append(paths, filepath.Join(filepath.Dir(exe), "config.json"))
+		dir := filepath.Dir(exe)
+		paths = append(paths, filepath.Join(dir, "admin_config.json"))
+		paths = append(paths, filepath.Join(dir, "config.json"))
 	}
-	paths = append(paths, "config.json")
+	paths = append(paths, "admin_config.json", "config.json")
 
 	for _, p := range paths {
 		if p == "" {
