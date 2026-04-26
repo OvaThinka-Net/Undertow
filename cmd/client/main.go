@@ -35,23 +35,54 @@ func (rawResolver) Resolve(ctx context.Context, name string) (context.Context, n
 	return ctx, nil, nil
 }
 
+func resolveNextToExe(name string) string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	alt := filepath.Join(filepath.Dir(exe), name)
+	if _, err := os.Stat(alt); err == nil {
+		return alt
+	}
+	return ""
+}
+
+func resolveFile(names ...string) string {
+	// Try CWD first
+	for _, n := range names {
+		if _, err := os.Stat(n); err == nil {
+			return n
+		}
+	}
+	// Try next to executable
+	for _, n := range names {
+		if alt := resolveNextToExe(n); alt != "" {
+			return alt
+		}
+	}
+	// Return first name as default (will produce a clear error)
+	return names[0]
+}
+
 func main() {
 	var configPath, gcPath string
-	flag.StringVar(&configPath, "c", "config.json", "Path to config file")
-	flag.StringVar(&gcPath, "gc", "credentials.json", "Path to Google Service Account JSON")
+	flag.StringVar(&configPath, "c", "", "Path to config file")
+	flag.StringVar(&gcPath, "gc", "", "Path to Google credentials JSON")
 	flag.Parse()
 
-	// If config doesn't exist at the given path, try next to the executable
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if exe, e := os.Executable(); e == nil {
-			alt := filepath.Join(filepath.Dir(exe), configPath)
-			if _, e2 := os.Stat(alt); e2 == nil {
-				configPath = alt
-				// Also resolve credentials relative to exe dir if not absolute
-				if !filepath.IsAbs(gcPath) {
-					gcPath = filepath.Join(filepath.Dir(exe), gcPath)
-				}
-			}
+	// Resolve config: try CWD then next to executable, for both config.json and client_config.json
+	if configPath == "" {
+		configPath = resolveFile("client_config.json", "config.json")
+	} else if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		if alt := resolveNextToExe(configPath); alt != "" {
+			configPath = alt
+		}
+	}
+	if gcPath == "" {
+		gcPath = resolveFile("credentials.json")
+	} else if _, err := os.Stat(gcPath); os.IsNotExist(err) {
+		if alt := resolveNextToExe(gcPath); alt != "" {
+			gcPath = alt
 		}
 	}
 
