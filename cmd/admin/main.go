@@ -1180,6 +1180,12 @@ func (pm *ProcessManager) handleClientDownload(w http.ResponseWriter, r *http.Re
 
 Platform: %s
 
+IMPORTANT — macOS Security:
+  Before first run, open Terminal in this folder and run:
+    xattr -d com.apple.quarantine %s
+    chmod +x %s
+  Or: System Settings → Privacy & Security → Allow Anyway
+
 Quick Start:
 1. Double-click %s to launch
 2. A menu bar icon (grey circle) appears in your system tray
@@ -1194,7 +1200,7 @@ To disconnect: click the tray icon → "Disconnect"
 To quit: click the tray icon → "Quit"
 
 Config folder: ~/.undertow/
-`, label, binFile)
+`, label, binFile, binFile, binFile)
 	} else if strings.Contains(platform, "windows") {
 		readme = fmt.Sprintf(`Undertow Client
 ==================
