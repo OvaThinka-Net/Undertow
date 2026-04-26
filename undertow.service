@@ -1,0 +1,24 @@
+[Unit]
+Description=Undertow Admin & Tunnel Server
+After=network.target
+
+[Service]
+Type=simple
+User=undertow
+Group=undertow
+WorkingDirectory=__INSTALL_DIR__
+ExecStart=__INSTALL_DIR__/admin
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=__INSTALL_DIR__
+PrivateTmp=false
+
+[Install]
+WantedBy=multi-user.target

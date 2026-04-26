@@ -51,6 +51,23 @@ Each zip contains: \`client\`, \`server\`, \`admin\` binaries + example configs 
 - **windows-amd64** — Windows x64
 - **windows-arm64** — Windows ARM
 
+### Server Install (Linux)
+\`\`\`bash
+# Download and extract (replace ARCH with your platform, e.g. linux-amd64)
+wget https://github.com/${REPO}/releases/download/${TAG}/undertow-${TAG}-linux-amd64.zip
+unzip undertow-${TAG}-linux-amd64.zip
+cd undertow-${TAG}-linux-amd64
+
+# Run the installer (creates user, configs, systemd service)
+sudo bash install.sh
+
+# Start the service
+sudo systemctl start undertow
+
+# Open the admin panel and follow the setup wizard
+# http://your-server-ip:8090
+\`\`\`
+
 ### Quick Start
 1. Download the zip for your server platform
 2. Extract and run \`./admin\` with an \`admin_config.json\`
