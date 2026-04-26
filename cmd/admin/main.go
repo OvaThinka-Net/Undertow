@@ -50,7 +50,7 @@ type AdminConfig struct {
 	CredentialsFile string `json:"credentials_file"`
 }
 
-func loadConfig(path string) AdminConfig {
+func loadConfig(path string) (AdminConfig, string) {
 	var cfg AdminConfig
 	json.Unmarshal(defaultConfigJSON, &cfg)
 
@@ -63,6 +63,7 @@ func loadConfig(path string) AdminConfig {
 	}
 	paths = append(paths, "admin_config.json", "config.json")
 
+	var loadedPath string
 	for _, p := range paths {
 		if p == "" {
 			continue
@@ -72,6 +73,7 @@ func loadConfig(path string) AdminConfig {
 			continue
 		}
 		json.Unmarshal(data, &cfg)
+		loadedPath = p
 		log.Printf("Loaded config from %s", p)
 		break
 	}
@@ -103,7 +105,7 @@ func loadConfig(path string) AdminConfig {
 		cfg.Password = hex.EncodeToString(b)
 	}
 
-	return cfg
+	return cfg, loadedPath
 }
 
 // ---------- Log Buffer ----------
@@ -821,17 +823,35 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 // ---------- Session Auth ----------
 
 type SessionManager struct {
-	username  string
-	password  string
-	secretKey []byte
-	maxAge    int
+	mu         sync.RWMutex
+	username   string
+	password   string
+	secretKey  []byte
+	maxAge     int
+	configPath string
+	cfg        *AdminConfig
 }
 
-func NewSessionManager(username, password string, sessionHours int) *SessionManager {
+const defaultPassword = "change-me"
+
+func NewSessionManager(cfg *AdminConfig, configPath string) *SessionManager {
 	key := make([]byte, 32)
 	rand.Read(key)
-	maxAge := sessionHours * 3600
-	return &SessionManager{username: username, password: password, secretKey: key, maxAge: maxAge}
+	maxAge := cfg.SessionHours * 3600
+	return &SessionManager{
+		username:   cfg.Username,
+		password:   cfg.Password,
+		secretKey:  key,
+		maxAge:     maxAge,
+		configPath: configPath,
+		cfg:        cfg,
+	}
+}
+
+func (sm *SessionManager) isDefaultPassword() bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.password == defaultPassword
 }
 
 func (sm *SessionManager) createToken() string {
@@ -886,7 +906,11 @@ func (sm *SessionManager) handleLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   sm.maxAge,
 	})
-	writeJSON(w, map[string]string{"ok": "logged in"})
+	resp := map[string]interface{}{"ok": "logged in"}
+	if sm.isDefaultPassword() {
+		resp["must_change_password"] = true
+	}
+	writeJSON(w, resp)
 }
 
 func (sm *SessionManager) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -897,6 +921,61 @@ func (sm *SessionManager) handleLogout(w http.ResponseWriter, r *http.Request) {
 		MaxAge: -1,
 	})
 	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+func (sm *SessionManager) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil {
+		writeJSON(w, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	sm.mu.RLock()
+	currentPw := sm.password
+	sm.mu.RUnlock()
+
+	if req.CurrentPassword != currentPw {
+		time.Sleep(500 * time.Millisecond)
+		w.WriteHeader(401)
+		writeJSON(w, map[string]string{"error": "current password is incorrect"})
+		return
+	}
+	if len(req.NewPassword) < 6 {
+		w.WriteHeader(400)
+		writeJSON(w, map[string]string{"error": "new password must be at least 6 characters"})
+		return
+	}
+	if req.NewPassword == defaultPassword {
+		w.WriteHeader(400)
+		writeJSON(w, map[string]string{"error": "please choose a different password"})
+		return
+	}
+
+	sm.mu.Lock()
+	sm.password = req.NewPassword
+	sm.cfg.Password = req.NewPassword
+	sm.mu.Unlock()
+
+	// Save to config file
+	if sm.configPath != "" {
+		data, err := json.MarshalIndent(sm.cfg, "", "  ")
+		if err == nil {
+			os.WriteFile(sm.configPath, data, 0600)
+		}
+	}
+
+	writeJSON(w, map[string]string{"ok": "password changed"})
+}
+
+func (sm *SessionManager) handlePasswordStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]bool{"must_change": sm.isDefaultPassword()})
 }
 
 func (sm *SessionManager) authMiddleware(next http.Handler) http.Handler {
@@ -1126,7 +1205,7 @@ func main() {
 	flag.StringVar(&configPath, "c", "", "Path to config.json")
 	flag.Parse()
 
-	cfg := loadConfig(configPath)
+	cfg, configPath := loadConfig(configPath)
 
 	listenAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	absDir, _ := filepath.Abs(".")
@@ -1135,13 +1214,15 @@ func main() {
 	}
 
 	pm := NewProcessManager(absDir, cfg)
-	sm := NewSessionManager(cfg.Username, cfg.Password, cfg.SessionHours)
+	sm := NewSessionManager(&cfg, configPath)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", pm.handleIndex)
 	mux.HandleFunc("/login", sm.handleLogin)
 	mux.HandleFunc("/api/login", sm.handleLogin)
 	mux.HandleFunc("/logout", sm.handleLogout)
+	mux.HandleFunc("/api/change-password", sm.handleChangePassword)
+	mux.HandleFunc("/api/password-status", sm.handlePasswordStatus)
 	mux.HandleFunc("/api/status", pm.handleStatus)
 	mux.HandleFunc("/api/start", pm.handleStart)
 	mux.HandleFunc("/api/stop", pm.handleStop)

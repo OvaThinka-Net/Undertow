@@ -102,7 +102,28 @@ ol li{margin-bottom:6px;font-size:.9em}
   <h1>⚡ Undertow</h1>
   <span class="dot" id="statusDot"></span>
   <span class="status-text" id="statusText">Loading...</span>
-  <button class="btn small" onclick="location.href='/logout'" style="margin-left:12px">Logout</button>
+  <button class="btn small" onclick="showPasswordModal()" style="margin-left:12px">Change Password</button>
+  <button class="btn small" onclick="location.href='/logout'" style="margin-left:4px">Logout</button>
+</div>
+
+<!-- Password Change Modal -->
+<div id="pwModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:none;align-items:center;justify-content:center">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px 32px;max-width:400px;width:90%">
+    <h2 style="margin:0 0 8px" id="pwTitle">Change Password</h2>
+    <p id="pwSubtitle" style="color:var(--dim);font-size:.9em;margin:0 0 16px;display:none">You must change the default password before continuing.</p>
+    <div id="pwError" style="color:#ff5252;font-size:.9em;margin-bottom:8px;display:none"></div>
+    <div id="pwSuccess" style="color:#4caf50;font-size:.9em;margin-bottom:8px;display:none"></div>
+    <label style="display:block;margin-bottom:4px;font-size:.85em;color:var(--dim)">Current Password</label>
+    <input type="password" id="pwCurrent" style="width:100%;padding:8px 10px;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);box-sizing:border-box">
+    <label style="display:block;margin-bottom:4px;font-size:.85em;color:var(--dim)">New Password</label>
+    <input type="password" id="pwNew" style="width:100%;padding:8px 10px;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);box-sizing:border-box">
+    <label style="display:block;margin-bottom:4px;font-size:.85em;color:var(--dim)">Confirm New Password</label>
+    <input type="password" id="pwConfirm" style="width:100%;padding:8px 10px;margin-bottom:16px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);box-sizing:border-box">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn small" id="pwCancelBtn" onclick="hidePasswordModal()">Cancel</button>
+      <button class="btn small" style="background:var(--accent)" onclick="submitPasswordChange()">Save</button>
+    </div>
+  </div>
 </div>
 
 <div class="container">
@@ -605,6 +626,59 @@ function esc(s){const d=document.createElement('div');d.textContent=s;return d.i
 (async()=>{const h=await api('/api/logs/history');if(Array.isArray(h))h.forEach(addLogLine);})();
 function connectSSE(){const es=new EventSource('/api/logs/stream');es.onmessage=e=>{try{addLogLine(JSON.parse(e.data));}catch(x){}};es.onerror=()=>{es.close();setTimeout(connectSSE,3000);};}
 connectSSE();
+
+// ===== Password Change =====
+let pwForced = false;
+function showPasswordModal(forced) {
+  pwForced = !!forced;
+  document.getElementById('pwModal').style.display = 'flex';
+  document.getElementById('pwError').style.display = 'none';
+  document.getElementById('pwSuccess').style.display = 'none';
+  document.getElementById('pwCurrent').value = '';
+  document.getElementById('pwNew').value = '';
+  document.getElementById('pwConfirm').value = '';
+  document.getElementById('pwSubtitle').style.display = forced ? 'block' : 'none';
+  document.getElementById('pwCancelBtn').style.display = forced ? 'none' : '';
+  document.getElementById('pwTitle').textContent = forced ? '⚠ Change Default Password' : 'Change Password';
+}
+function hidePasswordModal() { document.getElementById('pwModal').style.display = 'none'; }
+async function submitPasswordChange() {
+  const cur = document.getElementById('pwCurrent').value;
+  const nw = document.getElementById('pwNew').value;
+  const cf = document.getElementById('pwConfirm').value;
+  const errEl = document.getElementById('pwError');
+  const okEl = document.getElementById('pwSuccess');
+  errEl.style.display = 'none'; okEl.style.display = 'none';
+  if (nw !== cf) { errEl.textContent = 'Passwords do not match'; errEl.style.display = 'block'; return; }
+  if (nw.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; errEl.style.display = 'block'; return; }
+  try {
+    const r = await fetch('/api/change-password', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({current_password: cur, new_password: nw}) });
+    const d = await r.json();
+    if (d.ok) {
+      okEl.textContent = 'Password changed successfully';
+      okEl.style.display = 'block';
+      setTimeout(() => { hidePasswordModal(); }, 1200);
+    } else {
+      errEl.textContent = d.error || 'Failed to change password';
+      errEl.style.display = 'block';
+    }
+  } catch(e) { errEl.textContent = 'Network error'; errEl.style.display = 'block'; }
+}
+
+// Check if forced password change needed (via URL param or API)
+(async () => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('change_password') === '1') {
+    history.replaceState(null, '', '/');
+    showPasswordModal(true);
+    return;
+  }
+  try {
+    const r = await fetch('/api/password-status');
+    const d = await r.json();
+    if (d.must_change) showPasswordModal(true);
+  } catch(e) {}
+})();
 
 // ===== Init =====
 initDZ('wizDropZone'); initDZ('dropZone');
