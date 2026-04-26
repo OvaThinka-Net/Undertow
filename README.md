@@ -1,6 +1,6 @@
 # Undertow 🌊
 
-> Forked from [FlowDriver](https://github.com/k-one-e/raspberry-pi) by k-one-e — with added admin panel, setup wizard, client packaging, and system tray app.
+> Forked from [FlowDriver](https://github.com/NullLatency/FlowDriver) by NullLatency — with added admin panel, setup wizard, client packaging, and system tray app.
 
 **Undertow** is a covert transport system designed to tunnel network traffic (SOCKS5) through common cloud storage platforms like Google Drive. It allows for reliable communication in restrictive environments by leveraging legitimate API traffic.
 
