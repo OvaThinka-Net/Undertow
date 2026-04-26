@@ -30,17 +30,94 @@ Undertow works by treating a cloud storage folder as a data queue:
 
 ---
 
-## Setup & Installation / نصب و راه‌اندازی
+## Quick Start (Admin Panel) / شروع سریع
+
+The **easiest way** to set up Undertow is through the web admin panel. It includes a step-by-step wizard that walks you through everything — no terminal needed after the initial deploy.
+
+ساده‌ترین راه برای راه‌اندازی Undertow استفاده از پنل مدیریت وب است. این پنل شامل یک ویزارد گام‌به‌گام است که شما را در تمام مراحل راهنمایی می‌کند.
+
+### 1. Build & Deploy Admin
+
+```bash
+# Build admin + server binaries for Linux
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/admin ./cmd/admin
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/server ./cmd/server
+
+# Copy to your server
+scp bin/admin bin/server admin_config.json.example user@server:/path/to/undertow/
+```
+
+### 2. Configure Admin
+
+Create `admin_config.json` on the server (see `admin_config.json.example`):
+
+```json
+{
+  "host": "0.0.0.0",
+  "port": 8090,
+  "username": "admin",
+  "password": "change-me",
+  "session_hours": 168,
+  "server_bin": "server",
+  "server_config": "server_config.json",
+  "credentials_file": "credentials.json"
+}
+```
+
+### 3. Run & Open
+
+```bash
+./admin
+```
+
+Open `http://your-server-ip:8090` in your browser. The wizard will guide you through:
+1. Creating a Google Cloud project
+2. Enabling the Google Drive API
+3. Setting up OAuth consent screen
+4. Creating & uploading credentials
+5. Creating the Drive folder & authenticating
+6. Starting the tunnel server
+
+### 4. Download Client Packages
+
+Once the server is running, the admin dashboard lets you download ready-to-use **client `.zip` files** for all platforms. Each package includes the binary, config, credentials, and a README.
+
+### Systemd Service (Optional)
+
+```ini
+[Unit]
+Description=Undertow Admin
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/undertow
+ExecStart=/path/to/undertow/admin
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Admin Features
+- **Setup Wizard**: 6-step guided walkthrough
+- **Process Manager**: Start/stop the tunnel server from the browser
+- **Live Logs**: Real-time server log streaming
+- **Client Packages**: Download client zips for macOS, Linux, and Windows (arm64 & amd64)
+- **Cookie-based Auth**: Password-protected with configurable session duration
+
+---
+
+## Manual Setup (CLI) / راه‌اندازی دستی
+
+If you prefer to set things up manually without the admin panel:
 
 ### Prerequisites / پیش‌نیازها
 - **Go** (1.25 or higher)
 - **Google Drive API Credentials**: You need a `credentials.json` (OAuth2) file.
-- **Shared Folder (Auto)**: If you leave `google_folder_id` empty, the tool will automatically create a folder named **"Flow-Data"** and save its ID to your config!
+- **Shared Folder (Auto)**: If you leave `google_folder_id` empty, the tool will automatically create a folder and save its ID to your config.
 
 ### 1. Obtain Credentials / دریافت فایل اعتبارنامه
-To get your `credentials.json`, follow the instructions on the [Google Drive API Go Quickstart](https://developers.google.com/workspace/drive/api/quickstart/go) or follow these steps:
-
-برای دریافت فایل `credentials.json` می‌توانید طبق دستورالعمل‌های موجود در [شروع سریع Google Drive API برای Go](https://developers.google.com/workspace/drive/api/quickstart/go) عمل کنید یا مراحل زیر را انجام دهید:
 
 **English:**
 1.  **Enable the API**: Go to the [Google Cloud Console](https://console.cloud.google.com/), create a project, and enable the **Google Drive API**.
@@ -56,15 +133,14 @@ To get your `credentials.json`, follow the instructions on the [Google Drive API
 4.  **دانلود فایل**: فایل کلاینت سکرت را دانلود کرده و نام آن را به `credentials.json` تغییر دهید.
 5.  **انتشار برنامه (پیشنهادی)**: اگر وضعیت برنامه روی "Testing" باشد، توکن شما هر ۷ روز منقضی می‌شود. در صفحه OAuth consent screen بر روی "Publish App" کلیک کنید تا دسترسی برای اکانت شما دائمی شود.
 
-### 2. Build Binaries / ساخت فایل‌های اجرایی
+### 2. Build / ساخت فایل‌های اجرایی
+
 ```bash
 go build -o bin/client ./cmd/client
 go build -o bin/server ./cmd/server
 ```
 
-### 2. Configuration / پیکربندی
-
-Create your `config.json` based on the provided examples:
+### 3. Configuration / پیکربندی
 
 **Client Side (`client_config.json`):**
 ```json
@@ -81,21 +157,6 @@ Create your `config.json` based on the provided examples:
   }
 }
 ```
----
-
-## Performance & Quotas / عملکرد و سهمیه‌ها
-
-### English
-**Important**: Google Drive has strict API rate limits (quotas). 
-- Using very low values (e.g., `refresh_rate_ms: 100`) will consume your API quota very quickly.
-- To avoid connections being limited or blocked, it is recommended to keep these values above **100ms** at all times.
-- For heavy usage or multiple concurrent users, you should set these to **200ms or higher**.
-
-### فارسی
-**نکته مهم**: گوگل درایو محدودیت‌های سفت‌وسختی برای تعداد درخواست‌های API (Quota) دارد.
-- استفاده از مقادیر بسیار پایین (مثلاً `100ms`) باعث می‌شود سهمیه API شما به سرعت تمام شود.
-- برای جلوگیری از محدود شدن یا قطع شدن اتصال، توصیه می‌شود این مقادیر همیشه بالای **100ms** باشند.
-- برای استفاده‌های سنگین یا زمانی که چندین کاربر به صورت هم‌زمان متصل هستند، بهتر است این مقادیر را روی **200ms یا بالاتر** تنظیم کنید.
 
 **Server Side (`server_config.json`):**
 ```json
@@ -107,7 +168,7 @@ Create your `config.json` based on the provided examples:
 }
 ```
 
-### 3. Run / اجرا
+### 4. Run / اجرا
 
 **Server:**
 ```bash
@@ -119,107 +180,39 @@ Create your `config.json` based on the provided examples:
 ./bin/client -c client_config.json -gc credentials.json
 ```
 
----
+### 5. First-Time Authentication / احراز هویت اولیه
 
-## Usage & Authentication / نحوه استفاده و احراز هویت
-
-### 1. First-Time Authentication / احراز هویت اولیه
-The project uses OAuth2 "3-legged" flow. You only need to do this once on your local machine:
+The project uses OAuth2 "3-legged" flow. You only need to do this once:
 
 **English:**
-1.  Run the client: `./bin/client -c client_config.json -gc credentials.json`
-2.  A link will appear in your terminal. **Copy and open it** in your web browser.
+1.  Run the client or server. A link will appear in your terminal.
+2.  **Copy and open it** in your web browser.
 3.  Log in to your Google account and grant permissions.
 4.  You will be redirected to an address starting with `http://localhost` (it's okay if the page doesn't load).
 5.  **Copy the entire URL** from your browser's address bar and paste it back into your terminal.
 6.  The program will create a `.token` file next to your `credentials.json`. Authorization is now complete.
 
 **فارسی:**
-1. کلاینت را اجرا کنید: `./bin/client -c client_config.json -gc credentials.json`
-2. یک لینک در ترمینال ظاهر می‌شود. آن را کپی کرده و در مرورگر خود باز کنید.
+1. کلاینت یا سرور را اجرا کنید. یک لینک در ترمینال ظاهر می‌شود.
+2. آن را کپی کرده و در مرورگر خود باز کنید.
 3. وارد اکانت گوگل خود شوید و دسترسی‌های لازم را تایید کنید.
 4. شما به آدرسی که با `http://localhost` شروع می‌شود هدایت می‌شوید (اشکالی ندارد اگر صفحه باز نشود).
 5. **کل آدرس URL** را از نوار آدرس مرورگر کپی کرده و در ترمینال پیست کنید.
-6. برنامه یک فایل با پسوند `.token` در کنار `credentials.json` شما می‌سازد. احراز هویت تمام شد.
+6. برنامه یک فایل `.token` در کنار `credentials.json` شما می‌سازد. احراز هویت تمام شد.
 
-### 2. Deploying to Server / استقرار در سرور
+### 6. Deploying to Server / استقرار در سرور
+
 Once you have the `.token` file, you don't need to log in again.
 
 **English:**
-To run the server on a remote upstream machine:
 1.  Copy `credentials.json` **AND** the `.token` file to the server.
-2.  **Crucial**: Make sure your `server_config.json` has the **SAME** `google_folder_id` that the client just created and saved in your local config.
+2.  **Crucial**: Both client and server must use the **SAME** `credentials.json` (same OAuth client ID) and the **SAME** `google_folder_id`.
 3.  Run: `./bin/server -c server_config.json -gc credentials.json`
-4.  The server will automatically use the existing token and start immediately.
 
 **فارسی:**
-پس از دریافت فایل `.token` دیگر نیازی به لاگین مجدد نیست. برای اجرای سرور در یک ماشین دور (Upstream):
-1. فایل `credentials.json` **و** فایل `.token` ساخته شده را به سرور منتقل کنید.
-2. **خیلی مهم**: مطمئن شوید که در فایل `server_config.json` مقدار `google_folder_id` دقیقاً همان مقداری باشد که کلاینت به طور خودکار ساخته و در فایل کانفیگ شما ذخیره کرده است.
+1. فایل `credentials.json` **و** فایل `.token` را به سرور منتقل کنید.
+2. **خیلی مهم**: کلاینت و سرور باید از **همان** `credentials.json` (همان OAuth client ID) و **همان** `google_folder_id` استفاده کنند.
 3. اجرا کنید: `./bin/server -c server_config.json -gc credentials.json`
-4. سرور به صورت خودکار از توکن موجود استفاده کرده و بلافاصله شروع به کار می‌کند.
-
----
-
-## Web Admin Panel / پنل مدیریت وب
-
-Undertow includes a web-based admin panel with a **step-by-step setup wizard** that handles Google Cloud configuration, OAuth authentication, and server deployment — no terminal needed.
-
-### Features
-- **Setup Wizard**: 6-step guided walkthrough for Google Cloud project, API, OAuth, credentials upload, Drive folder creation, and server launch
-- **Process Manager**: Start/stop the tunnel server from the browser
-- **Live Logs**: Real-time server log streaming
-- **Client Packages**: Download ready-to-use client `.zip` files for all platforms (includes binary + config + credentials + README)
-- **Cookie-based Auth**: Password-protected with configurable session duration
-
-### Deploy the Admin Panel
-
-1. Build the admin binary:
-```bash
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/admin ./cmd/admin
-```
-
-2. Copy to your server:
-```bash
-scp bin/admin admin_config.json credentials.json server_config.json user@server:/path/to/undertow/
-```
-
-3. Create `admin_config.json` (see `admin_config.json.example`):
-```json
-{
-  "host": "0.0.0.0",
-  "port": 8090,
-  "username": "admin",
-  "password": "change-me",
-  "session_hours": 168,
-  "server_bin": "server",
-  "server_config": "server_config.json",
-  "credentials_file": "credentials.json"
-}
-```
-
-4. Run:
-```bash
-./admin
-```
-
-5. Open `http://your-server-ip:8090` in your browser. The wizard will guide you through the entire setup.
-
-### Systemd Service (Optional)
-```ini
-[Unit]
-Description=Undertow Admin
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/path/to/undertow
-ExecStart=/path/to/undertow/admin
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
 
 ---
 
@@ -236,6 +229,20 @@ Place `client_config.json` and `credentials.json` in `~/.undertow/`, then run `.
 
 ---
 
+## Performance & Quotas / عملکرد و سهمیه‌ها
+
+**Important**: Google Drive has strict API rate limits (quotas).
+- Using very low values (e.g., `refresh_rate_ms: 100`) will consume your API quota very quickly.
+- To avoid connections being limited or blocked, keep these values above **100ms** at all times.
+- For heavy usage or multiple concurrent users, set these to **200ms or higher**.
+
+**نکته مهم**: گوگل درایو محدودیت‌های سفت‌وسختی برای تعداد درخواست‌های API (Quota) دارد.
+- استفاده از مقادیر بسیار پایین (مثلاً `100ms`) باعث می‌شود سهمیه API شما به سرعت تمام شود.
+- برای جلوگیری از محدود شدن یا قطع شدن اتصال، توصیه می‌شود این مقادیر همیشه بالای **100ms** باشند.
+- برای استفاده‌های سنگین بهتر است این مقادیر را روی **200ms یا بالاتر** تنظیم کنید.
+
+---
+
 ## Building All Platforms / ساخت برای تمام پلتفرم‌ها
 
 ```bash
@@ -244,10 +251,10 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/admin-linux-amd64 ./cmd/admin
 
 # Client (all platforms)
-CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-darwin-arm64 ./cmd/client
-CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-darwin-amd64 ./cmd/client
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-linux-amd64 ./cmd/client
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-linux-arm64 ./cmd/client
+CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-darwin-arm64 ./cmd/client
+CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-darwin-amd64 ./cmd/client
+CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-linux-amd64 ./cmd/client
+CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-linux-arm64 ./cmd/client
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-windows-amd64.exe ./cmd/client
 CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-windows-arm64.exe ./cmd/client
 
