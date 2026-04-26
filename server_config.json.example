@@ -1,0 +1,12 @@
+{
+  "storage_type": "google",
+  "google_folder_id": "REDACTED_FOLDER_ID",
+  "refresh_rate_ms": 100,
+  "flush_rate_ms": 300,
+  "transport": {
+    "TargetIP": "",
+    "SNI": "",
+    "HostHeader": "",
+    "InsecureSkipVerify": false
+  }
+}

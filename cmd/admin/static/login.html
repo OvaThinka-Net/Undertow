@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Undertow — Login</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--dim:#8b949e;--green:#3fb950;--red:#f85149;--blue:#58a6ff;--radius:8px}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:40px;width:100%;max-width:380px;text-align:center}
+.login-box h1{font-size:1.4em;margin-bottom:8px}
+.login-box p{color:var(--dim);font-size:.9em;margin-bottom:24px}
+.field{margin-bottom:16px;text-align:left}
+.field label{display:block;font-size:.85em;color:var(--dim);margin-bottom:4px}
+.field input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:10px 12px;font-size:.95em;outline:none;transition:border-color .2s}
+.field input:focus{border-color:var(--blue)}
+.btn{width:100%;padding:10px;border:none;border-radius:6px;background:var(--green);color:#000;font-size:.95em;font-weight:600;cursor:pointer;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.error{color:var(--red);font-size:.85em;margin-top:12px;min-height:20px}
+</style>
+</head>
+<body>
+<div class="login-box">
+  <h1>⚡ Undertow</h1>
+  <p>Admin Panel</p>
+  <form id="loginForm" onsubmit="return doLogin(event)">
+    <div class="field">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" autofocus required placeholder="Enter username">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required placeholder="Enter password">
+    </div>
+    <button class="btn" type="submit" id="loginBtn">Sign In</button>
+    <div class="error" id="errorMsg"></div>
+  </form>
+</div>
+<script>
+async function doLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('errorMsg');
+  const pw = document.getElementById('password').value;
+  const user = document.getElementById('username').value;
+  btn.disabled = true;
+  err.textContent = '';
+  try {
+    const resp = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: user, password: pw})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      window.location.href = '/';
+    } else {
+      err.textContent = data.error || 'Login failed';
+    }
+  } catch(ex) {
+    err.textContent = 'Connection error';
+  }
+  btn.disabled = false;
+  return false;
+}
+</script>
+</body>
+</html>

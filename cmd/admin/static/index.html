@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Undertow Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--dim:#8b949e;--green:#3fb950;--red:#f85149;--blue:#58a6ff;--yellow:#d29922;--radius:8px;--purple:#bc8cff}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+a{color:var(--blue)}
+h1{font-size:1.4em;font-weight:600}
+h2{font-size:1.15em;font-weight:600;margin-bottom:8px}
+h3{font-size:1em;font-weight:600;margin-bottom:6px}
+p{margin-bottom:8px}
+code{background:#1c2128;padding:2px 6px;border-radius:4px;font-size:.85em;font-family:'SF Mono',Monaco,monospace}
+ol{padding-left:20px;margin-bottom:12px}
+ol li{margin-bottom:6px;font-size:.9em}
+
+.header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.header h1{flex:1}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.off{background:var(--red);box-shadow:0 0 8px var(--red)}
+.dot.setup{background:var(--yellow);box-shadow:0 0 8px var(--yellow)}
+.status-text{font-size:.9em;color:var(--dim)}
+
+.container{max-width:1100px;margin:0 auto;padding:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:768px){.grid{grid-template-columns:1fr}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+
+.controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn{padding:8px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:.85em;transition:all .15s;text-decoration:none;display:inline-block}
+.btn:hover{border-color:var(--dim)}
+.btn.primary{background:var(--green);color:#000;border-color:var(--green);font-weight:600}
+.btn.primary:hover{opacity:.85}
+.btn.danger{background:var(--red);color:#fff;border-color:var(--red)}
+.btn.danger:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.small{padding:4px 10px;font-size:.8em}
+
+.field{margin-bottom:12px}
+.field label{display:block;font-size:.85em;color:var(--dim);margin-bottom:4px}
+.field textarea,.field input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:10px;font-family:'SF Mono',Monaco,monospace;font-size:.85em;resize:vertical}
+.field textarea{min-height:180px}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.8em;font-weight:500}
+.badge.ok{background:#0d2818;color:var(--green);border:1px solid #1a4a2a}
+.badge.missing{background:#2d1215;color:var(--red);border:1px solid #4a1a1e}
+
+.drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:24px;text-align:center;color:var(--dim);cursor:pointer;transition:all .2s}
+.drop-zone:hover,.drop-zone.over{border-color:var(--blue);color:var(--blue)}
+.drop-zone input{display:none}
+
+/* Stepper */
+.stepper{display:flex;gap:0;margin-bottom:24px;overflow-x:auto}
+.step{flex:1;text-align:center;padding:12px 8px;position:relative;min-width:100px}
+.step-num{width:32px;height:32px;border-radius:50%;border:2px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:.85em;font-weight:600;margin-bottom:4px;transition:all .3s}
+.step-label{display:block;font-size:.75em;color:var(--dim)}
+.step.done .step-num{background:var(--green);color:#000;border-color:var(--green)}
+.step.done .step-label{color:var(--green)}
+.step.active .step-num{border-color:var(--blue);color:var(--blue);box-shadow:0 0 12px rgba(88,166,255,.3)}
+.step.active .step-label{color:var(--blue);font-weight:600}
+.step::after{content:'';position:absolute;top:26px;right:-50%;width:100%;height:2px;background:var(--border);z-index:0}
+.step:last-child::after{display:none}
+.step.done::after{background:var(--green)}
+
+.step-content{display:none}
+.step-content.active{display:block}
+
+.hint{background:#1c2128;border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin:12px 0;font-size:.85em}
+.hint.warning{border-color:var(--yellow);background:#2d220088}
+.hint.success{border-color:var(--green);background:#0d281888}
+
+.log-box{background:#010409;border:1px solid var(--border);border-radius:6px;height:350px;overflow-y:auto;font-family:'SF Mono',Monaco,monospace;font-size:.8em;padding:8px;scroll-behavior:smooth}
+.log-line{padding:1px 0;white-space:pre-wrap;word-break:break-all}
+.log-line .time{color:var(--dim)}
+.log-line .admin{color:var(--yellow)}
+.log-line .server{color:var(--blue)}
+
+.info-row{display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap}
+.info-item{font-size:.85em}
+.info-item span{color:var(--dim)}
+
+.toast-container{position:fixed;top:16px;right:16px;z-index:1000}
+.toast{padding:10px 16px;border-radius:6px;margin-bottom:8px;font-size:.85em;animation:slideIn .3s ease}
+.toast.success{background:#0d2818;color:var(--green);border:1px solid #1a4a2a}
+.toast.error{background:#2d1215;color:var(--red);border:1px solid #4a1a1e}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+.hidden{display:none !important}
+.ext-link{color:var(--blue);text-decoration:none;font-weight:500}
+.ext-link:hover{text-decoration:underline}
+.ext-link::after{content:' ↗';font-size:.8em}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚡ Undertow</h1>
+  <span class="dot" id="statusDot"></span>
+  <span class="status-text" id="statusText">Loading...</span>
+  <button class="btn small" onclick="location.href='/logout'" style="margin-left:12px">Logout</button>
+</div>
+
+<div class="container">
+
+<!-- ===== SETUP WIZARD ===== -->
+<div id="wizardView">
+  <div class="card" style="margin-bottom:20px;padding:16px 20px">
+    <h2 style="margin:0">🛠 Setup Wizard</h2>
+    <p style="margin:4px 0 0;color:var(--dim);font-size:.9em">Follow these steps to get Undertow running. Each step builds on the previous one.</p>
+  </div>
+
+  <div class="stepper" id="stepper">
+    <div class="step" data-step="1"><span class="step-num">1</span><span class="step-label">Google Project</span></div>
+    <div class="step" data-step="2"><span class="step-num">2</span><span class="step-label">Enable API</span></div>
+    <div class="step" data-step="3"><span class="step-num">3</span><span class="step-label">OAuth Setup</span></div>
+    <div class="step" data-step="4"><span class="step-num">4</span><span class="step-label">Upload &amp; Auth</span></div>
+    <div class="step" data-step="5"><span class="step-num">5</span><span class="step-label">Drive Folder</span></div>
+    <div class="step" data-step="6"><span class="step-num">6</span><span class="step-label">Launch</span></div>
+  </div>
+
+  <!-- Step 1 -->
+  <div class="step-content" data-step="1">
+    <div class="card">
+      <h2>Step 1: Create a Google Cloud Project</h2>
+      <p>Undertow uses Google Drive as its transport layer. You need a free Google Cloud project to get API access.</p>
+      <ol>
+        <li>Go to <a class="ext-link" href="https://console.cloud.google.com/projectcreate" target="_blank">Google Cloud Console — New Project</a></li>
+        <li>Enter a project name (e.g. <code>undertow</code>) and click <strong>Create</strong></li>
+        <li>Wait a few seconds for the project to be created</li>
+        <li>Make sure the new project is selected in the top dropdown bar</li>
+      </ol>
+      <div class="hint">💡 This is completely free. Google Cloud projects don't cost anything. The Drive API has generous free quotas.</div>
+      <div class="controls">
+        <button class="btn primary" onclick="goToStep(2)">I've created the project →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step-content" data-step="2">
+    <div class="card">
+      <h2>Step 2: Enable the Google Drive API</h2>
+      <p>Enable the Drive API so Undertow can store and retrieve data:</p>
+      <ol>
+        <li>Go to <a class="ext-link" href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank">Google Drive API page</a></li>
+        <li>Make sure your project is selected in the top bar</li>
+        <li>Click the blue <strong>Enable</strong> button</li>
+        <li>Wait until the page shows "API enabled"</li>
+      </ol>
+      <div class="hint">💡 If you see "API enabled" already, it's already turned on — just proceed.</div>
+      <div class="controls">
+        <button class="btn" onclick="goToStep(1)">← Back</button>
+        <button class="btn primary" onclick="goToStep(3)">API is enabled →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="step-content" data-step="3">
+    <div class="card">
+      <h2>Step 3: Create OAuth Credentials</h2>
+
+      <h3>A) Configure Google Auth Platform</h3>
+      <ol>
+        <li>Go to <a class="ext-link" href="https://console.cloud.google.com/auth/overview" target="_blank">Google Auth Platform</a></li>
+        <li>If you see "not configured yet", click <strong>Get Started</strong></li>
+        <li><strong>App Information:</strong> Enter an app name (e.g. <code>Undertow</code>) and your email → click <strong>Next</strong></li>
+        <li><strong>Audience:</strong> Select <strong>External</strong> → click <strong>Next</strong></li>
+        <li><strong>Contact Information:</strong> Enter your email → click <strong>Next</strong></li>
+        <li>Click <strong>Finish</strong></li>
+      </ol>
+      <div class="hint warning">
+        🚨 <strong>Required:</strong> The app starts in "Testing" mode which <strong>blocks sign-in</strong>. Go to
+        <a class="ext-link" href="https://console.cloud.google.com/auth/audience" target="_blank">Audience</a>
+        in the left sidebar and click <strong>Publish App</strong> → <strong>Confirm</strong>.<br>
+        Without this, you'll get "Access blocked" (Error 403) when authorizing.<br>
+        <span style="font-size:.85em;opacity:.8">Publishing also prevents your token from expiring every 7 days.</span>
+      </div>
+
+      <h3 style="margin-top:16px">B) Create an OAuth Client ID</h3>
+      <p style="font-size:.85em;color:var(--dim)">⚠️ You must complete part A first — the Clients page won't work until the Auth Platform is configured.</p>
+      <ol>
+        <li>In the left sidebar, click <a class="ext-link" href="https://console.cloud.google.com/auth/clients" target="_blank">Clients</a></li>
+        <li>Click <strong>+ Create Client</strong></li>
+        <li>Set <strong>Application type</strong> to <code>Desktop app</code></li>
+        <li>Name it anything (e.g. <code>Undertow</code>)</li>
+        <li>Click <strong>Create</strong></li>
+        <li>Click the <strong>⬇ Download</strong> button (download icon) to save the JSON file</li>
+      </ol>
+      <div class="hint success">✅ You should now have a <code>client_secret_*.json</code> file downloaded to your computer.</div>
+      <div class="controls">
+        <button class="btn" onclick="goToStep(2)">← Back</button>
+        <button class="btn primary" onclick="goToStep(4)">I have the JSON file →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4 -->
+  <div class="step-content" data-step="4">
+    <div class="card">
+      <h2>Step 4: Upload Credentials &amp; Authorize</h2>
+
+      <h3>A) Upload your credentials file</h3>
+      <div style="margin-bottom:8px"><span>Status: </span><span class="badge" id="wizCredsBadge">—</span></div>
+      <div class="drop-zone" id="wizDropZone" onclick="document.getElementById('wizFileInput').click()">
+        Drop the downloaded JSON file here, or click to browse
+        <input type="file" id="wizFileInput" accept=".json" onchange="uploadFile(this.files[0])">
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <h3>B) Authorize with Google</h3>
+        <p>This grants Undertow permission to use your Google Drive.</p>
+        <div style="margin-bottom:8px"><span>Status: </span><span class="badge" id="wizTokenBadge">—</span></div>
+        <div class="hint warning" style="margin-bottom:10px">
+          🚨 <strong>Before you authorize:</strong> Make sure you've published your app. Go to
+          <a class="ext-link" href="https://console.cloud.google.com/auth/audience" target="_blank">Auth Platform → Audience</a>
+          and click <strong>Publish App</strong> → <strong>Confirm</strong>.<br>
+          If you skip this, Google will block sign-in with "Error 403: access_denied".
+        </div>
+        <button class="btn" onclick="getOAuthURL()" id="wizBtnOAuth">Generate Authorization Link</button>
+        <div id="wizOAuthBox" style="display:none;margin-top:12px">
+          <div class="hint">
+            <strong>Instructions:</strong><br>
+            1. Click the link below — it opens Google's sign-in page<br>
+            2. Sign in with your Google account and click <strong>Allow</strong><br>
+            3. You'll be redirected to a page that <strong>won't load</strong> — that's expected!<br>
+            4. Copy the <strong>entire URL</strong> from your browser's address bar<br>
+            5. Paste it in the field below
+          </div>
+          <p style="margin-top:8px"><a class="ext-link" id="wizOAuthLink" href="#" target="_blank">Open Google Authorization Page</a></p>
+          <div class="field" style="margin-top:8px">
+            <input type="text" id="wizOAuthInput" placeholder="Paste the redirect URL here (starts with http://localhost?code=...)">
+          </div>
+          <button class="btn primary" onclick="exchangeToken()">Submit Code</button>
+        </div>
+      </div>
+
+      <div class="controls" style="margin-top:16px">
+        <button class="btn" onclick="goToStep(3)">← Back</button>
+        <button class="btn primary" id="wizStep4Next" onclick="goToStep(5)">Continue →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 5 -->
+  <div class="step-content" data-step="5">
+    <div class="card">
+      <h2>Step 5: Create Drive Folder</h2>
+      <p>Undertow needs a shared folder in Google Drive to exchange data between server and client. Click below to create it automatically.</p>
+      <div class="field" style="margin-bottom:12px">
+        <label>Folder Name</label>
+        <input type="text" id="wizFolderName" value="Flow-Data" placeholder="Flow-Data" style="max-width:300px">
+      </div>
+      <div style="margin-bottom:8px"><span>Status: </span><span class="badge" id="wizFolderBadge">—</span></div>
+      <div id="wizFolderIdDisplay" style="display:none;margin:8px 0">
+        <span style="font-size:.85em;color:var(--dim)">Folder ID: </span><code id="wizFolderId"></code>
+      </div>
+      <button class="btn primary" onclick="createFolder()" id="wizBtnFolder">Create Folder</button>
+
+      <div id="wizShareInstructions" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <h3>B) Share with the client user</h3>
+        <p>The client needs access to this folder. Share it with the Google account that will run the client:</p>
+        <ol>
+          <li>Open <a class="ext-link" href="https://drive.google.com" target="_blank">Google Drive</a></li>
+          <li>Find the folder you just created (shown above)</li>
+          <li>Right-click → <strong>Share</strong></li>
+          <li>Enter the client user's Gmail address and set role to <strong>Editor</strong></li>
+          <li>Click <strong>Send</strong></li>
+        </ol>
+        <div class="hint" style="margin-top:8px">
+          💡 If server and client use the <strong>same</strong> Google account, you can skip this — both sides already see the folder.
+        </div>
+      </div>
+
+      <div class="controls" style="margin-top:16px">
+        <button class="btn" onclick="goToStep(4)">← Back</button>
+        <button class="btn primary" id="wizStep5Next" onclick="goToStep(6)">Continue →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 6 -->
+  <div class="step-content" data-step="6">
+    <div class="card">
+      <h2>Step 6: Launch Server</h2>
+      <p>Everything is configured. Review the checklist and start the server.</p>
+      <div id="wizLaunchChecks" style="margin:12px 0"></div>
+      <div class="controls">
+        <button class="btn" onclick="goToStep(5)">← Back</button>
+        <button class="btn primary" id="wizBtnLaunch" onclick="launchFromWizard()" style="padding:12px 24px;font-size:1em">🚀 Start Server</button>
+      </div>
+      <div class="hint success" id="wizLaunchSuccess" style="display:none;margin-top:12px">
+        ✅ Server is running! Switching to dashboard...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DASHBOARD ===== -->
+<div id="dashboardView" class="hidden">
+  <div class="card" style="margin-bottom:16px">
+    <h2>Server</h2>
+    <div class="info-row">
+      <div class="info-item"><span>PID:</span> <b id="infoPid">—</b></div>
+      <div class="info-item"><span>Uptime:</span> <b id="infoUptime">—</b></div>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="btnStart" onclick="apiPost('/api/start')">Start</button>
+      <button class="btn danger" id="btnStop" onclick="apiPost('/api/stop')">Stop</button>
+      <button class="btn" id="btnRestart" onclick="apiPost('/api/restart')">Restart</button>
+      <button class="btn small" onclick="showWizard()" style="margin-left:auto">Setup Wizard</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Credentials</h2>
+      <div style="margin-bottom:8px"><span>credentials.json: </span><span class="badge" id="credsBadge">—</span></div>
+      <div style="margin-bottom:12px"><span>OAuth Token: </span><span class="badge" id="tokenBadge">—</span></div>
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        Drop credentials.json here or click to upload
+        <input type="file" id="fileInput" accept=".json" onchange="uploadFile(this.files[0])">
+      </div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <h3>OAuth</h3>
+        <button class="btn" onclick="getOAuthURL()">Generate Auth Link</button>
+        <div id="oauthUrlBox" style="display:none;margin-top:8px">
+          <p style="font-size:.85em"><a class="ext-link" id="oauthLink" href="#" target="_blank">Open Authorization</a></p>
+          <div class="field" style="margin-top:8px">
+            <input type="text" id="oauthInput" placeholder="Paste redirect URL or code...">
+          </div>
+          <button class="btn primary" onclick="exchangeToken()">Exchange Token</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Configuration</h2>
+      <div class="field">
+        <label>server_config.json</label>
+        <textarea id="configEditor" spellcheck="false"></textarea>
+      </div>
+      <div class="controls">
+        <button class="btn primary" onclick="saveConfig()">Save Config</button>
+        <button class="btn" onclick="loadConfig()">Reload</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>📦 Client Package</h2>
+    <p style="font-size:.9em;color:var(--dim);margin-bottom:12px">Generate a ready-to-use package for client users. Includes the client binary, credentials, config, and a README.</p>
+
+    <h3>Client Setup Checklist</h3>
+    <div id="clientChecklist" style="margin-bottom:12px"></div>
+
+    <div id="clientDownloadSection" style="display:none">
+      <h3 style="margin-top:12px">Download Package</h3>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <select id="platformSelect" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:.85em">
+          <option value="">Select platform...</option>
+        </select>
+        <button class="btn primary" onclick="downloadClientPackage()" id="btnDownloadClient">Download .zip</button>
+      </div>
+      <div class="hint" style="margin-top:12px">
+        <strong>What the user gets:</strong><br>
+        • <code>client binary</code> — the Undertow client for their OS<br>
+        • <code>credentials.json</code> — OAuth client credentials (same app, user signs in with their own Google account)<br>
+        • <code>client_config.json</code> — pre-configured to connect<br>
+        • <code>README.txt</code> — step-by-step instructions
+      </div>
+      <div class="hint warning" style="margin-top:8px">
+        ⚠️ <strong>Remind the client user:</strong> They must be added as an <strong>Editor</strong> on the shared Google Drive folder (Step 5B in the wizard), otherwise the client won't have access.
+      </div>
+    </div>
+
+    <div id="clientMissingBinaries" class="hint warning" style="display:none;margin-top:12px">
+      ⚠️ No client binaries found. Upload client binaries to the <code>clients/</code> folder on the server.<br>
+      <span style="font-size:.85em;opacity:.8">Expected files: <code>client-darwin-arm64</code>, <code>client-darwin-amd64</code>, <code>client-linux-amd64</code>, <code>client-windows-amd64.exe</code>, etc.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;margin-bottom:12px">
+      <h2 style="flex:1;margin:0">Logs</h2>
+      <label style="font-size:.8em;color:var(--dim);margin-right:12px">
+        <input type="checkbox" id="autoScroll" checked> Auto-scroll
+      </label>
+      <button class="btn small" onclick="clearLogs()">Clear</button>
+    </div>
+    <div class="log-box" id="logBox"></div>
+  </div>
+</div>
+
+</div>
+<div class="toast-container" id="toasts"></div>
+
+<script>
+let setupState = {}, currentStep = 1, isSetupComplete = false;
+
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+async function api(path, opts={}) {
+  const resp = await fetch(path, opts);
+  if (resp.status === 401) { window.location.href = '/login'; return {}; }
+  return resp.json();
+}
+async function apiPost(path, body) {
+  const opts = {method:'POST'};
+  if (body) { opts.headers = {'Content-Type':'application/json'}; opts.body = JSON.stringify(body); }
+  const data = await api(path, opts);
+  if (data.error) toast(data.error, 'error');
+  else if (data.ok) toast(data.ok);
+  refreshAll();
+  return data;
+}
+
+// ===== Setup =====
+async function refreshSetupStatus() {
+  setupState = await api('/api/setup/status');
+  updateStepState(1, true);
+  updateStepState(2, true);
+  updateStepState(3, setupState.has_credentials);
+  updateStepState(4, setupState.has_credentials && setupState.has_token);
+  updateStepState(5, setupState.has_folder_id);
+  updateStepState(6, setupState.server_running);
+  setBadge('wizCredsBadge', setupState.has_credentials, 'Uploaded', 'Not uploaded');
+  setBadge('wizTokenBadge', setupState.has_token, 'Authenticated', 'Not authorized');
+  setBadge('wizFolderBadge', setupState.has_folder_id, 'Configured', 'Not created');
+  const c = document.getElementById('wizLaunchChecks');
+  if (c) c.innerHTML = [
+    chk('Server binary', setupState.has_server_bin),
+    chk('Credentials uploaded', setupState.has_credentials),
+    chk('OAuth authorized', setupState.has_token),
+    chk('Drive folder configured', setupState.has_folder_id),
+    chk('Server config exists', setupState.has_config),
+  ].join('');
+  return setupState;
+}
+function chk(l,ok){ return `<div style="font-size:.9em;padding:2px 0">${ok?'✅':'❌'} ${l}</div>`; }
+function setBadge(id,ok,y,n){ const e=document.getElementById(id); if(!e)return; e.className='badge '+(ok?'ok':'missing'); e.textContent=ok?y:n; }
+function updateStepState(n,done){ const e=document.querySelector(`.step[data-step="${n}"]`); if(!e)return; e.classList.toggle('done',done&&n!==currentStep); e.classList.toggle('active',n===currentStep); }
+
+function goToStep(n) {
+  currentStep = n;
+  document.querySelectorAll('.step-content').forEach(e => e.classList.remove('active'));
+  const t = document.querySelector(`.step-content[data-step="${n}"]`);
+  if (t) t.classList.add('active');
+  document.querySelectorAll('.step').forEach(e => { e.classList.remove('active'); });
+  const s = document.querySelector(`.step[data-step="${n}"]`);
+  if (s) s.classList.add('active');
+  refreshSetupStatus();
+}
+function showWizard() {
+  isSetupComplete = false;
+  document.getElementById('wizardView').classList.remove('hidden');
+  document.getElementById('dashboardView').classList.add('hidden');
+  const dot = document.getElementById('statusDot');
+  dot.className = 'dot setup';
+  document.getElementById('statusText').textContent = 'Setup';
+  refreshSetupStatus();
+  if (!setupState.has_credentials) goToStep(1);
+  else if (!setupState.has_token) goToStep(4);
+  else if (!setupState.has_folder_id) goToStep(5);
+  else goToStep(6);
+}
+function showDashboard() {
+  isSetupComplete = true;
+  document.getElementById('wizardView').classList.add('hidden');
+  document.getElementById('dashboardView').classList.remove('hidden');
+  refreshStatus(); loadConfig(); loadClientPlatforms();
+}
+
+// ===== Dashboard =====
+async function refreshStatus() {
+  const s = await api('/api/status');
+  const dot = document.getElementById('statusDot');
+  dot.className = 'dot ' + (s.running ? 'on' : 'off');
+  document.getElementById('statusText').textContent = s.running ? 'Running' : 'Stopped';
+  document.getElementById('infoPid').textContent = s.running ? s.pid : '—';
+  document.getElementById('infoUptime').textContent = s.running ? s.uptime : '—';
+  document.getElementById('btnStart').disabled = s.running;
+  document.getElementById('btnStop').disabled = !s.running;
+  document.getElementById('btnRestart').disabled = !s.running;
+  setBadge('credsBadge', s.creds_exists, 'Uploaded', 'Missing');
+  setBadge('tokenBadge', s.token_exists, 'Authenticated', 'Missing');
+}
+async function refreshAll() { await refreshSetupStatus(); if (isSetupComplete) await refreshStatus(); }
+
+// ===== Upload =====
+function initDZ(zId) {
+  const z = document.getElementById(zId); if(!z)return;
+  z.addEventListener('dragover', e=>{ e.preventDefault(); z.classList.add('over'); });
+  z.addEventListener('dragleave', ()=>z.classList.remove('over'));
+  z.addEventListener('drop', e=>{ e.preventDefault(); z.classList.remove('over'); if(e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]); });
+}
+async function uploadFile(f) {
+  if(!f)return;
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fetch('/api/credentials',{method:'POST',body:fd});
+  const d = await r.json();
+  if(d.error) toast(d.error,'error'); else toast(d.ok||'Uploaded');
+  refreshAll();
+}
+
+// ===== OAuth =====
+async function getOAuthURL() {
+  const d = await api('/api/oauth/url');
+  if(d.error){toast(d.error,'error');return;}
+  const wl=document.getElementById('wizOAuthLink'),wb=document.getElementById('wizOAuthBox');
+  if(wl){wl.href=d.url;wb.style.display='block';}
+  const dl=document.getElementById('oauthLink'),db=document.getElementById('oauthUrlBox');
+  if(dl){dl.href=d.url;db.style.display='block';}
+}
+async function exchangeToken() {
+  const wi=document.getElementById('wizOAuthInput'),di=document.getElementById('oauthInput');
+  const v=(wi&&wi.value.trim())||(di&&di.value.trim())||'';
+  if(!v){toast('Paste the redirect URL or code','error');return;}
+  await apiPost('/api/oauth/exchange',{input:v});
+}
+
+// ===== Folder =====
+async function createFolder() {
+  const b=document.getElementById('wizBtnFolder'); b.disabled=true; b.textContent='Creating...';
+  const fn=(document.getElementById('wizFolderName').value||'').trim()||'Flow-Data';
+  const d=await apiPost('/api/setup/folder',{folder_name:fn});
+  b.disabled=false; b.textContent='Create Folder';
+  if(d.folder_id){document.getElementById('wizFolderId').textContent=d.folder_id;document.getElementById('wizFolderIdDisplay').style.display='block';document.getElementById('wizShareInstructions').style.display='block';}
+}
+async function launchFromWizard() {
+  const b=document.getElementById('wizBtnLaunch'); b.disabled=true; b.textContent='Starting...';
+  const d=await apiPost('/api/start');
+  if(d.ok){document.getElementById('wizLaunchSuccess').style.display='block';setTimeout(()=>showDashboard(),2000);}
+  b.disabled=false; b.textContent='🚀 Start Server';
+}
+
+// ===== Client Package =====
+async function loadClientPlatforms() {
+  const d = await api('/api/client/platforms');
+  if (!d.platforms) return;
+  const sel = document.getElementById('platformSelect');
+  const existing = sel.querySelectorAll('option:not(:first-child)');
+  existing.forEach(o => o.remove());
+  let anyAvail = false;
+  d.platforms.forEach(p => {
+    if (!p.available) return;
+    anyAvail = true;
+    const opt = document.createElement('option');
+    opt.value = p.key;
+    opt.textContent = p.label;
+    if (p.key === d.suggested) opt.selected = true;
+    sel.appendChild(opt);
+  });
+
+  const cl = document.getElementById('clientChecklist');
+  cl.innerHTML = [
+    chk('Credentials uploaded', setupState.has_credentials),
+    chk('OAuth authorized', setupState.has_token),
+    chk('Drive folder created', setupState.has_folder_id),
+    chk('Client binaries available', anyAvail),
+  ].join('');
+
+  if (anyAvail && setupState.has_credentials) {
+    document.getElementById('clientDownloadSection').style.display = 'block';
+    document.getElementById('clientMissingBinaries').style.display = 'none';
+  } else if (!anyAvail) {
+    document.getElementById('clientDownloadSection').style.display = 'none';
+    document.getElementById('clientMissingBinaries').style.display = 'block';
+  }
+}
+function downloadClientPackage() {
+  const sel = document.getElementById('platformSelect');
+  if (!sel.value) { toast('Select a platform first', 'error'); return; }
+  window.location.href = '/api/client/download?platform=' + encodeURIComponent(sel.value);
+}
+
+// ===== Config =====
+async function loadConfig() {
+  const r=await fetch('/api/config'); if(r.status===401){window.location.href='/login';return;}
+  const t=await r.text();
+  try{document.getElementById('configEditor').value=JSON.stringify(JSON.parse(t),null,2);}catch(e){document.getElementById('configEditor').value=t;}
+}
+async function saveConfig() {
+  const r=document.getElementById('configEditor').value;
+  try{JSON.parse(r);}catch(e){toast('Invalid JSON: '+e.message,'error');return;}
+  await apiPost('/api/config',JSON.parse(r));
+}
+
+// ===== Logs =====
+const logBox=document.getElementById('logBox');
+function addLogLine(e){const el=document.createElement('div');el.className='log-line';const c=e.source==='admin'?'admin':'server';el.innerHTML='<span class="time">'+esc(e.time)+'</span> <span class="'+c+'">['+esc(e.source)+']</span> '+esc(e.message);logBox.appendChild(el);if(document.getElementById('autoScroll').checked)logBox.scrollTop=logBox.scrollHeight;}
+function clearLogs(){logBox.innerHTML='';}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+(async()=>{const h=await api('/api/logs/history');if(Array.isArray(h))h.forEach(addLogLine);})();
+function connectSSE(){const es=new EventSource('/api/logs/stream');es.onmessage=e=>{try{addLogLine(JSON.parse(e.data));}catch(x){}};es.onerror=()=>{es.close();setTimeout(connectSSE,3000);};}
+connectSSE();
+
+// ===== Init =====
+initDZ('wizDropZone'); initDZ('dropZone');
+(async()=>{
+  const s=await refreshSetupStatus();
+  const ok=s.has_credentials&&s.has_token&&s.has_folder_id&&s.has_server_bin;
+  if(ok&&s.server_running) showDashboard();
+  else if(ok) goToStep(6);
+  else if(!s.has_credentials) goToStep(1);
+  else if(!s.has_token) goToStep(4);
+  else if(!s.has_folder_id) goToStep(5);
+  else goToStep(6);
+  setInterval(async()=>{if(isSetupComplete)await refreshStatus();},3000);
+})();
+</script>
+</body>
+</html>

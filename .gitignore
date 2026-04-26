@@ -1,0 +1,22 @@
+# Configs & credentials
+*.json
+!*_config.json.example
+!**/config.default.json
+!**/config.client.json
+
+# Build artifacts
+bin/
+release/
+/admin
+/client
+/server
+/tray
+
+# Misc
+*.tmp
+*~
+.DS_Store
+*.zip
+*.exe
+*.log
+*.token
