@@ -34,6 +34,9 @@ var indexHTML []byte
 //go:embed static/login.html
 var loginHTML []byte
 
+//go:embed static/change-credentials.html
+var changeCredsHTML []byte
+
 //go:embed config.default.json
 var defaultConfigJSON []byte
 
@@ -832,7 +835,7 @@ type SessionManager struct {
 	cfg        *AdminConfig
 }
 
-const defaultPassword = "change-me"
+const defaultPassword = "admin"
 const defaultUsername = "admin"
 
 func NewSessionManager(cfg *AdminConfig, configPath string) *SessionManager {
@@ -997,6 +1000,11 @@ func (sm *SessionManager) handleCredentialsStatus(w http.ResponseWriter, r *http
 	writeJSON(w, map[string]interface{}{"must_change": isDefault, "username": username})
 }
 
+func (sm *SessionManager) handleChangeCredsPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(changeCredsHTML)
+}
+
 func (sm *SessionManager) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Allow login page and login API without auth
@@ -1013,6 +1021,22 @@ func (sm *SessionManager) authMiddleware(next http.Handler) http.Handler {
 			}
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
+		}
+		// Force credential change page if defaults are active
+		if sm.isDefaultCredentials() {
+			allowed := r.URL.Path == "/change-credentials" ||
+				r.URL.Path == "/api/change-credentials" ||
+				r.URL.Path == "/api/credentials-status" ||
+				r.URL.Path == "/logout"
+			if !allowed {
+				if strings.HasPrefix(r.URL.Path, "/api/") {
+					w.WriteHeader(403)
+					writeJSON(w, map[string]string{"error": "must change default credentials first"})
+					return
+				}
+				http.Redirect(w, r, "/change-credentials", http.StatusFound)
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -1240,6 +1264,7 @@ func main() {
 	mux.HandleFunc("/login", sm.handleLogin)
 	mux.HandleFunc("/api/login", sm.handleLogin)
 	mux.HandleFunc("/logout", sm.handleLogout)
+	mux.HandleFunc("/change-credentials", sm.handleChangeCredsPage)
 	mux.HandleFunc("/api/change-credentials", sm.handleChangeCredentials)
 	mux.HandleFunc("/api/credentials-status", sm.handleCredentialsStatus)
 	mux.HandleFunc("/api/status", pm.handleStatus)

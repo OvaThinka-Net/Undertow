@@ -102,8 +102,7 @@ ol li{margin-bottom:6px;font-size:.9em}
   <h1>⚡ Undertow</h1>
   <span class="dot" id="statusDot"></span>
   <span class="status-text" id="statusText">Loading...</span>
-  <button class="btn small" onclick="showCredsBanner()" style="margin-left:12px">Credentials</button>
-  <button class="btn small" onclick="location.href='/logout'" style="margin-left:4px">Logout</button>
+  <button class="btn small" onclick="location.href='/logout'" style="margin-left:12px">Logout</button>
 </div>
 
 <div class="container">
@@ -304,38 +303,6 @@ ol li{margin-bottom:6px;font-size:.9em}
 
 <!-- ===== DASHBOARD ===== -->
 <div id="dashboardView" class="hidden">
-  <!-- Credentials Change Banner -->
-  <div id="credsBanner" class="card" style="display:none;margin-bottom:16px;border:1px solid var(--yellow)">
-    <div id="credsBannerWarning" style="background:#2d220088;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:.9em">
-      ⚠ <b>Default credentials detected.</b> Set your username and password before continuing.
-    </div>
-    <div id="credsError" style="color:#ff5252;font-size:.9em;margin-bottom:8px;display:none"></div>
-    <div id="credsSuccess" style="color:#4caf50;font-size:.9em;margin-bottom:8px;display:none"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-      <div>
-        <label style="display:block;margin-bottom:4px;font-size:.85em;color:var(--dim)">Username</label>
-        <input type="text" id="credsUsername" autocomplete="username" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);box-sizing:border-box">
-      </div>
-      <div>
-        <label style="display:block;margin-bottom:4px;font-size:.85em;color:var(--dim)">Current Password</label>
-        <input type="password" id="credsCurrent" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);box-sizing:border-box">
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-      <div>
-        <label style="display:block;margin-bottom:4px;font-size:.85em;color:var(--dim)">New Password</label>
-        <input type="password" id="credsNew" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);box-sizing:border-box">
-      </div>
-      <div>
-        <label style="display:block;margin-bottom:4px;font-size:.85em;color:var(--dim)">Confirm New Password</label>
-        <input type="password" id="credsConfirm" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);box-sizing:border-box">
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn primary" onclick="submitCreds()">Save &amp; Continue</button>
-      <button class="btn small" id="credsCloseBtn" onclick="document.getElementById('credsBanner').style.display='none'" style="display:none">Close</button>
-    </div>
-  </div>
 
   <div class="card" style="margin-bottom:16px">
     <h2>Server</h2>
@@ -484,7 +451,7 @@ async function refreshSetupStatus() {
 }
 function chk(l,ok){ return `<div style="font-size:.9em;padding:2px 0">${ok?'✅':'❌'} ${l}</div>`; }
 function setBadge(id,ok,y,n){ const e=document.getElementById(id); if(!e)return; e.className='badge '+(ok?'ok':'missing'); e.textContent=ok?y:n; }
-function updateStepState(n,done){ const e=document.querySelector(`.step[data-step="${n}"]`); if(!e)return; e.classList.toggle('done',done&&n!==currentStep); e.classList.toggle('active',n===currentStep); }
+function updateStepState(n,done){ const e=document.querySelector(`.step[data-step="${n}"]`); if(!e)return; e.classList.toggle('done',done&&n<currentStep); e.classList.toggle('active',n===currentStep); }
 
 function goToStep(n) {
   currentStep = n;
@@ -514,10 +481,6 @@ function showDashboard() {
   document.getElementById('wizardView').classList.add('hidden');
   document.getElementById('dashboardView').classList.remove('hidden');
   refreshStatus(); loadConfig(); loadClientPlatforms();
-  // Show credentials banner if defaults
-  fetch('/api/credentials-status').then(r=>r.json()).then(d=>{
-    if(d.must_change) showCredsBanner(true);
-  }).catch(()=>{});
 }
 
 // ===== Dashboard =====
@@ -643,49 +606,6 @@ function esc(s){const d=document.createElement('div');d.textContent=s;return d.i
 (async()=>{const h=await api('/api/logs/history');if(Array.isArray(h))h.forEach(addLogLine);})();
 function connectSSE(){const es=new EventSource('/api/logs/stream');es.onmessage=e=>{try{addLogLine(JSON.parse(e.data));}catch(x){}};es.onerror=()=>{es.close();setTimeout(connectSSE,3000);};}
 connectSSE();
-
-// ===== Credentials Change (inline banner) =====
-function showCredsBanner(forced) {
-  const banner = document.getElementById('credsBanner');
-  banner.style.display = 'block';
-  document.getElementById('credsError').style.display = 'none';
-  document.getElementById('credsSuccess').style.display = 'none';
-  document.getElementById('credsCurrent').value = '';
-  document.getElementById('credsNew').value = '';
-  document.getElementById('credsConfirm').value = '';
-  document.getElementById('credsBannerWarning').style.display = forced ? 'block' : 'none';
-  document.getElementById('credsCloseBtn').style.display = forced ? 'none' : '';
-  banner.style.borderColor = forced ? 'var(--yellow)' : 'var(--border)';
-  fetch('/api/credentials-status').then(r=>r.json()).then(d=>{
-    document.getElementById('credsUsername').value = d.username || '';
-  }).catch(()=>{});
-  banner.scrollIntoView({behavior:'smooth',block:'start'});
-}
-async function submitCreds() {
-  const usr = document.getElementById('credsUsername').value.trim();
-  const cur = document.getElementById('credsCurrent').value;
-  const nw = document.getElementById('credsNew').value;
-  const cf = document.getElementById('credsConfirm').value;
-  const errEl = document.getElementById('credsError');
-  const okEl = document.getElementById('credsSuccess');
-  errEl.style.display = 'none'; okEl.style.display = 'none';
-  if (usr.length < 3) { errEl.textContent = 'Username must be at least 3 characters'; errEl.style.display = 'block'; return; }
-  if (nw !== cf) { errEl.textContent = 'Passwords do not match'; errEl.style.display = 'block'; return; }
-  if (nw.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; errEl.style.display = 'block'; return; }
-  try {
-    const r = await fetch('/api/change-credentials', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({current_password: cur, new_username: usr, new_password: nw}) });
-    const d = await r.json();
-    if (d.ok) {
-      okEl.textContent = 'Credentials saved successfully';
-      okEl.style.display = 'block';
-      errEl.style.display = 'none';
-      setTimeout(() => { document.getElementById('credsBanner').style.display = 'none'; }, 1500);
-    } else {
-      errEl.textContent = d.error || 'Failed to change credentials';
-      errEl.style.display = 'block';
-    }
-  } catch(e) { errEl.textContent = 'Network error'; errEl.style.display = 'block'; }
-}
 
 // ===== Init =====
 initDZ('wizDropZone'); initDZ('dropZone');

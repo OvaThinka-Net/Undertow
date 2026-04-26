@@ -55,7 +55,11 @@ async function doLogin(e) {
     });
     const data = await resp.json();
     if (data.ok) {
-      window.location.href = '/';
+      if (data.must_change_password) {
+        window.location.href = '/change-credentials';
+      } else {
+        window.location.href = '/';
+      }
     } else {
       err.textContent = data.error || 'Login failed';
     }

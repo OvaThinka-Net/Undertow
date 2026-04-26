@@ -56,7 +56,7 @@ Create `admin_config.json` on the server (see `admin_config.json.example`):
   "host": "0.0.0.0",
   "port": 8090,
   "username": "admin",
-  "password": "change-me",
+  "password": "admin",
   "session_hours": 168,
   "server_bin": "server",
   "server_config": "server_config.json",

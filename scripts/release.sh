@@ -69,7 +69,7 @@ sudo systemctl start undertow
 
 ### Quick Start
 1. Run the one-line installer or download the zip for your server platform
-2. Open **http://your-server-ip:8090** and log in (default: admin / change-me)
+2. Open **http://your-server-ip:8090** and log in (default: admin / admin)
 3. You will be prompted to change the default password on first login
 4. Follow the setup wizard to configure Google Drive credentials
 5. Download ready-to-use client packages from the admin panel (bundles client binary + credentials + config)
