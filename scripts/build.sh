@@ -50,7 +50,7 @@ for platform in "${platforms[@]}"; do
     unset GOARM
 
     cp client_config.json.example server_config.json.example admin_config.json.example README.md "$OUT/"
-    cp install.sh undertow.service "$OUT/"
+    cp install.sh uninstall.sh undertow.service "$OUT/"
 
     (cd "$RELEASE_DIR" && zip -qr "${FOLDER}.zip" "$FOLDER")
     rm -rf "$OUT"
