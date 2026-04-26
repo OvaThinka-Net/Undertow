@@ -833,6 +833,7 @@ type SessionManager struct {
 }
 
 const defaultPassword = "change-me"
+const defaultUsername = "admin"
 
 func NewSessionManager(cfg *AdminConfig, configPath string) *SessionManager {
 	key := make([]byte, 32)
@@ -848,10 +849,10 @@ func NewSessionManager(cfg *AdminConfig, configPath string) *SessionManager {
 	}
 }
 
-func (sm *SessionManager) isDefaultPassword() bool {
+func (sm *SessionManager) isDefaultCredentials() bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	return sm.password == defaultPassword
+	return sm.username == defaultUsername && sm.password == defaultPassword
 }
 
 func (sm *SessionManager) createToken() string {
@@ -907,7 +908,7 @@ func (sm *SessionManager) handleLogin(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   sm.maxAge,
 	})
 	resp := map[string]interface{}{"ok": "logged in"}
-	if sm.isDefaultPassword() {
+	if sm.isDefaultCredentials() {
 		resp["must_change_password"] = true
 	}
 	writeJSON(w, resp)
@@ -923,13 +924,14 @@ func (sm *SessionManager) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
-func (sm *SessionManager) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+func (sm *SessionManager) handleChangeCredentials(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
 	var req struct {
 		CurrentPassword string `json:"current_password"`
+		NewUsername     string `json:"new_username"`
 		NewPassword     string `json:"new_password"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil {
@@ -957,9 +959,22 @@ func (sm *SessionManager) handleChangePassword(w http.ResponseWriter, r *http.Re
 		writeJSON(w, map[string]string{"error": "please choose a different password"})
 		return
 	}
+	newUsername := strings.TrimSpace(req.NewUsername)
+	if newUsername == "" {
+		w.WriteHeader(400)
+		writeJSON(w, map[string]string{"error": "username cannot be empty"})
+		return
+	}
+	if len(newUsername) < 3 {
+		w.WriteHeader(400)
+		writeJSON(w, map[string]string{"error": "username must be at least 3 characters"})
+		return
+	}
 
 	sm.mu.Lock()
+	sm.username = newUsername
 	sm.password = req.NewPassword
+	sm.cfg.Username = newUsername
 	sm.cfg.Password = req.NewPassword
 	sm.mu.Unlock()
 
@@ -971,11 +986,15 @@ func (sm *SessionManager) handleChangePassword(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	writeJSON(w, map[string]string{"ok": "password changed"})
+	writeJSON(w, map[string]string{"ok": "credentials changed"})
 }
 
-func (sm *SessionManager) handlePasswordStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]bool{"must_change": sm.isDefaultPassword()})
+func (sm *SessionManager) handleCredentialsStatus(w http.ResponseWriter, r *http.Request) {
+	sm.mu.RLock()
+	isDefault := sm.username == defaultUsername && sm.password == defaultPassword
+	username := sm.username
+	sm.mu.RUnlock()
+	writeJSON(w, map[string]interface{}{"must_change": isDefault, "username": username})
 }
 
 func (sm *SessionManager) authMiddleware(next http.Handler) http.Handler {
@@ -1221,8 +1240,8 @@ func main() {
 	mux.HandleFunc("/login", sm.handleLogin)
 	mux.HandleFunc("/api/login", sm.handleLogin)
 	mux.HandleFunc("/logout", sm.handleLogout)
-	mux.HandleFunc("/api/change-password", sm.handleChangePassword)
-	mux.HandleFunc("/api/password-status", sm.handlePasswordStatus)
+	mux.HandleFunc("/api/change-credentials", sm.handleChangeCredentials)
+	mux.HandleFunc("/api/credentials-status", sm.handleCredentialsStatus)
 	mux.HandleFunc("/api/status", pm.handleStatus)
 	mux.HandleFunc("/api/start", pm.handleStart)
 	mux.HandleFunc("/api/stop", pm.handleStop)
