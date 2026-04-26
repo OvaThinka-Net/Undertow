@@ -57,7 +57,10 @@ Each zip contains: \`client\`, \`server\`, \`admin\` binaries + example configs 
 ARCH=\$(uname -m); case \$ARCH in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; armv7l) ARCH=armv7;; armv6l) ARCH=armv6;; esac
 wget https://github.com/${REPO}/releases/download/${TAG}/undertow-${TAG}-linux-\${ARCH}.zip
 unzip undertow-${TAG}-linux-\${ARCH}.zip
-cd undertow-${TAG}-linux-\${ARCH}
+
+# Move to /opt/undertow
+sudo mv undertow-${TAG}-linux-\${ARCH} /opt/undertow
+cd /opt/undertow
 
 # Run the installer (creates user, configs, systemd service)
 sudo bash install.sh
