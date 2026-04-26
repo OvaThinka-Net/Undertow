@@ -158,3 +158,100 @@ To run the server on a remote upstream machine:
 2. **خیلی مهم**: مطمئن شوید که در فایل `server_config.json` مقدار `google_folder_id` دقیقاً همان مقداری باشد که کلاینت به طور خودکار ساخته و در فایل کانفیگ شما ذخیره کرده است.
 3. اجرا کنید: `./bin/server -c server_config.json -gc credentials.json`
 4. سرور به صورت خودکار از توکن موجود استفاده کرده و بلافاصله شروع به کار می‌کند.
+
+---
+
+## Web Admin Panel / پنل مدیریت وب
+
+Undertow includes a web-based admin panel with a **step-by-step setup wizard** that handles Google Cloud configuration, OAuth authentication, and server deployment — no terminal needed.
+
+### Features
+- **Setup Wizard**: 6-step guided walkthrough for Google Cloud project, API, OAuth, credentials upload, Drive folder creation, and server launch
+- **Process Manager**: Start/stop the tunnel server from the browser
+- **Live Logs**: Real-time server log streaming
+- **Client Packages**: Download ready-to-use client `.zip` files for all platforms (includes binary + config + credentials + README)
+- **Cookie-based Auth**: Password-protected with configurable session duration
+
+### Deploy the Admin Panel
+
+1. Build the admin binary:
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/admin ./cmd/admin
+```
+
+2. Copy to your server:
+```bash
+scp bin/admin admin_config.json credentials.json server_config.json user@server:/path/to/undertow/
+```
+
+3. Create `admin_config.json` (see `admin_config.json.example`):
+```json
+{
+  "host": "0.0.0.0",
+  "port": 8090,
+  "username": "admin",
+  "password": "change-me",
+  "session_hours": 168,
+  "server_bin": "server",
+  "server_config": "server_config.json",
+  "credentials_file": "credentials.json"
+}
+```
+
+4. Run:
+```bash
+./admin
+```
+
+5. Open `http://your-server-ip:8090` in your browser. The wizard will guide you through the entire setup.
+
+### Systemd Service (Optional)
+```ini
+[Unit]
+Description=Undertow Admin
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/undertow
+ExecStart=/path/to/undertow/admin
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+---
+
+## System Tray App (macOS) / اپلیکیشن سیستم تری
+
+A native macOS menu bar app for clients. Connect/disconnect the tunnel with one click — no terminal required.
+
+```bash
+# Build (requires CGO for macOS Cocoa)
+go build -o bin/tray ./cmd/tray
+```
+
+Place `client_config.json` and `credentials.json` in `~/.undertow/`, then run `./bin/tray`. The menu bar icon shows connection status and lets you toggle the tunnel.
+
+---
+
+## Building All Platforms / ساخت برای تمام پلتفرم‌ها
+
+```bash
+# Server & Admin (Linux x86_64)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/server-linux-amd64 ./cmd/server
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/admin-linux-amd64 ./cmd/admin
+
+# Client (all platforms)
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-darwin-arm64 ./cmd/client
+CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-darwin-amd64 ./cmd/client
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-linux-amd64 ./cmd/client
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-linux-arm64 ./cmd/client
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-windows-amd64.exe ./cmd/client
+CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-windows-arm64.exe ./cmd/client
+
+# Tray (macOS only, requires CGO)
+GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/tray-darwin-arm64 ./cmd/tray
+GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/tray-darwin-amd64 ./cmd/tray
+```
