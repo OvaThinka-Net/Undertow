@@ -91,6 +91,9 @@ func main() {
 	// First-run: auto-copy config files from next to the binary
 	firstRunSetup()
 
+	// Remove any leftover system proxy from previous versions
+	disableProxy()
+
 	// Auto-enable start-at-login on first run
 	if !isAutoStartEnabled() {
 		if err := enableAutoStart(); err != nil {

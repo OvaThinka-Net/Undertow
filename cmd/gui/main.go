@@ -458,6 +458,9 @@ func main() {
 	log.SetOutput(io.MultiWriter(logs, safeWriter{os.Stderr}))
 	log.SetFlags(log.Ltime)
 
+	// Remove any leftover system proxy from previous tray versions
+	cleanupProxy()
+
 	// Resolve data directory: use dir containing the executable
 	exePath, _ := os.Executable()
 	dataDir := filepath.Dir(exePath)
