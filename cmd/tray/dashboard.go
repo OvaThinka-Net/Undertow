@@ -121,6 +121,9 @@ func (d *Dashboard) handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	fmt.Fprintf(w, ": connected\n\n")
+	flusher.Flush()
 
 	for _, entry := range d.logs.Lines() {
 		data, _ := json.Marshal(entry)
