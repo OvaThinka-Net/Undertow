@@ -143,9 +143,17 @@ func firstRunSetup() {
 	}
 }
 
+// safeWriter wraps a writer and swallows errors (for Windows GUI where stderr is invalid).
+type safeWriter struct{ w io.Writer }
+
+func (s safeWriter) Write(p []byte) (int, error) {
+	s.w.Write(p)
+	return len(p), nil
+}
+
 func onReady() {
 	logs := NewLogBuffer(1000)
-	log.SetOutput(io.MultiWriter(os.Stderr, logs))
+	log.SetOutput(io.MultiWriter(logs, safeWriter{os.Stderr}))
 	log.SetFlags(log.Ltime)
 
 	tunnel := NewTunnel(appDataDir)
