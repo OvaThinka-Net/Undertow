@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/OvaThinka-Net/Undertow/internal/config"
 	"github.com/OvaThinka-Net/Undertow/internal/httpclient"
@@ -98,13 +99,57 @@ func main() {
 	cancel()
 }
 
+// isPrivateIP returns true if the IP is in a private, loopback, or reserved range.
+func isPrivateIP(ip net.IP) bool {
+	privateRanges := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"169.254.0.0/16",
+		"::1/128",
+		"fc00::/7",
+		"fe80::/10",
+	}
+	for _, cidr := range privateRanges {
+		_, network, _ := net.ParseCIDR(cidr)
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 func handleServerConn(sessionID, targetAddr string, session *transport.Session, engine *transport.Engine) {
 	defer engine.RemoveSession(sessionID)
 
-	conn, err := net.Dial("tcp", targetAddr)
+	// SSRF protection: resolve the target and reject private/reserved IPs
+	host, port, err := net.SplitHostPort(targetAddr)
+	if err != nil {
+		log.Printf("Invalid target address %s: %v", targetAddr, err)
+		return
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		log.Printf("DNS lookup failed for %s: %v", host, err)
+		return
+	}
+	for _, ip := range ips {
+		if isPrivateIP(ip) {
+			log.Printf("BLOCKED session %s: destination %s resolves to private IP %s", sessionID, targetAddr, ip)
+			// Send an HTTP redirect to a fun page so the browser doesn't just hang
+			redirect := "HTTP/1.1 302 Found\r\n" +
+				"Location: https://www.google.com/teapot\r\n" +
+				"Content-Length: 0\r\n" +
+				"Connection: close\r\n\r\n"
+			session.EnqueueTx([]byte(redirect))
+			return
+		}
+	}
+
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 10*time.Second)
 	if err != nil {
 		log.Printf("Dial error to %s: %v", targetAddr, err)
-		// Send back a close packet? Just closing the session will notify client
 		return
 	}
 	defer conn.Close()
