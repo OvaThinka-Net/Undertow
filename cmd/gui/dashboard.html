@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Undertow</title>
+<title>Undertow [build 7]</title>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -327,7 +327,11 @@ async function pollStatus() {
         }
 
         // Render logs from the same response
-        if (data.logs) renderLogs(data.logs);
+        if (data.logs) {
+            renderLogs(data.logs);
+        } else {
+            addLog({time: new Date().toISOString(), message: '[debug] data.logs is: ' + JSON.stringify(data.logs)});
+        }
     } catch (_) {}
 }
 
@@ -352,6 +356,7 @@ async function toggleAutoStart(enabled) {
 }
 
 // Init
+addLog({time: new Date().toISOString(), message: '[build 7] Dashboard loaded'});
 loadConfig();
 pollStatus();
 setInterval(pollStatus, 1000);

@@ -45,7 +45,6 @@ func (d *Dashboard) Start() error {
 	mux.HandleFunc("/api/status", d.handleStatus)
 	mux.HandleFunc("/api/connect", d.handleConnect)
 	mux.HandleFunc("/api/disconnect", d.handleDisconnect)
-	mux.HandleFunc("/api/logs", d.handleLogs)
 	mux.HandleFunc("/api/config", d.handleConfig)
 	mux.HandleFunc("/api/autostart", d.handleAutoStart)
 
@@ -79,6 +78,7 @@ func (d *Dashboard) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"has_config": fileExists(filepath.Join(d.dataDir, "client_config.json")),
 		"autostart":  isAutoStartEnabled(),
 		"os":         runtime.GOOS,
+		"logs":       d.logs.Lines(),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
@@ -109,53 +109,6 @@ func (d *Dashboard) handleDisconnect(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"ok": "disconnected"})
-}
-
-func (d *Dashboard) handleLogs(w http.ResponseWriter, r *http.Request) {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming not supported", 500)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	fmt.Fprintf(w, ": connected\n\n")
-	flusher.Flush()
-
-	for _, entry := range d.logs.Lines() {
-		data, _ := json.Marshal(entry)
-		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
-			return
-		}
-	}
-	flusher.Flush()
-
-	ch := d.logs.Subscribe()
-	defer d.logs.Unsubscribe(ch)
-
-	ticker := time.NewTicker(20 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case entry := <-ch:
-			data, _ := json.Marshal(entry)
-			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
-				return
-			}
-			flusher.Flush()
-		case <-ticker.C:
-			if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
-				return
-			}
-			flusher.Flush()
-		case <-r.Context().Done():
-			return
-		}
-	}
 }
 
 func (d *Dashboard) handleConfig(w http.ResponseWriter, r *http.Request) {

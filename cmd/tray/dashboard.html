@@ -264,17 +264,17 @@ function addLog(entry) {
     logsEl.scrollTop = logsEl.scrollHeight;
 }
 
-let evtSource;
-function startLogStream() {
-    if (evtSource) evtSource.close();
-    evtSource = new EventSource('/api/logs');
-    evtSource.onmessage = function(e) {
-        try { addLog(JSON.parse(e.data)); } catch (_) {}
-    };
-    evtSource.onerror = function() {
-        evtSource.close();
-        setTimeout(startLogStream, 3000);
-    };
+let logCount = 0;
+function renderLogs(entries) {
+    if (!Array.isArray(entries)) return;
+    if (entries.length < logCount) {
+        logsEl.innerHTML = '';
+        logCount = 0;
+    }
+    for (let i = logCount; i < entries.length; i++) {
+        addLog(entries[i]);
+    }
+    logCount = entries.length;
 }
 
 async function loadConfig() {
@@ -325,6 +325,9 @@ async function pollStatus() {
             row.style.display = 'block';
             document.getElementById('chkAutoStart').checked = !!data.autostart;
         }
+
+        // Render logs from the same response
+        if (data.logs) renderLogs(data.logs);
     } catch (_) {}
 }
 
@@ -350,9 +353,8 @@ async function toggleAutoStart(enabled) {
 
 // Init
 loadConfig();
-startLogStream();
 pollStatus();
-setInterval(pollStatus, 5000);
+setInterval(pollStatus, 1000);
 </script>
 </body>
 </html>

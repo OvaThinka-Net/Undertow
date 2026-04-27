@@ -322,7 +322,6 @@ func startDashboard(tunnel *Tunnel, logs *LogBuffer, dataDir string) int {
 		json.NewEncoder(w).Encode(map[string]string{"ok": "disconnected"})
 	})
 
-
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		configPath := filepath.Join(dataDir, "client_config.json")
 		w.Header().Set("Content-Type", "application/json")
