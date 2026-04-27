@@ -394,6 +394,17 @@ func openBrowser(url string) {
 	}
 }
 
+// safeWriter wraps a writer and swallows errors (for Windows GUI where stderr is invalid).
+type safeWriter struct{ w io.Writer }
+
+func (s safeWriter) Write(p []byte) (int, error) {
+	n, _ := s.w.Write(p)
+	if n == 0 {
+		n = len(p)
+	}
+	return n, nil
+}
+
 // ---------- Main ----------
 
 func main() {
@@ -401,7 +412,7 @@ func main() {
 	flag.Parse()
 
 	logs := NewLogBuffer(1000)
-	log.SetOutput(io.MultiWriter(os.Stderr, logs))
+	log.SetOutput(io.MultiWriter(logs, safeWriter{os.Stderr}))
 	log.SetFlags(log.Ltime)
 
 	// Resolve data directory: use dir containing the executable
