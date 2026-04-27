@@ -36,6 +36,10 @@ type AppConfig struct {
 
 	// Transport configures the dpi-evasion layer.
 	Transport httpclient.TransportConfig `json:"transport,omitempty"`
+
+	// Timezone is an IANA tz name (e.g. "Europe/Berlin", "UTC") applied to
+	// log timestamps and time formatting. Empty means use the system default.
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // FolderName returns the configured folder name, defaulting to "Flow-Data".

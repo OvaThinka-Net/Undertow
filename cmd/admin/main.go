@@ -53,6 +53,7 @@ type AdminConfig struct {
 	ServerBin       string `json:"server_bin"`
 	ServerConfig    string `json:"server_config"`
 	CredentialsFile string `json:"credentials_file"`
+	Timezone        string `json:"timezone,omitempty"`
 }
 
 func loadConfig(path string) (AdminConfig, string) {
@@ -1432,6 +1433,17 @@ func main() {
 	flag.Parse()
 
 	cfg, configPath := loadConfig(configPath)
+
+	// Apply timezone if configured (affects log timestamps + time.Now()
+	// for everything in this process).
+	if cfg.Timezone != "" {
+		if loc, err := time.LoadLocation(cfg.Timezone); err == nil {
+			time.Local = loc
+			log.Printf("Timezone set to %s", cfg.Timezone)
+		} else {
+			log.Printf("Warning: invalid timezone %q: %v", cfg.Timezone, err)
+		}
+	}
 
 	listenAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	absDir, _ := filepath.Abs(".")

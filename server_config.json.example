@@ -3,6 +3,7 @@
   "google_folder_id": "",
   "refresh_rate_ms": 100,
   "flush_rate_ms": 150,
+  "timezone": "Europe/Berlin",
   "transport": {
     "TargetIP": "",
     "SNI": "",

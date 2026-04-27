@@ -6,5 +6,6 @@
   "session_hours": 168,
   "server_bin": "server",
   "server_config": "server_config.json",
-  "credentials_file": "credentials.json"
+  "credentials_file": "credentials.json",
+  "timezone": ""
 }
