@@ -1322,5 +1322,7 @@ func main() {
 
 	log.Println("Shutting down...")
 	pm.Stop()
-	srv.Shutdown(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	srv.Shutdown(ctx)
 }
