@@ -283,7 +283,7 @@ func (b *GoogleBackend) ListQuery(ctx context.Context, prefix string) ([]string,
 		return nil, err
 	}
 
-	q := fmt.Sprintf("name contains '%s'", prefix)
+	q := fmt.Sprintf("name contains '%s'", strings.ReplaceAll(prefix, "'", "\\'"))
 	if b.folderID != "" {
 		q += fmt.Sprintf(" and '%s' in parents", b.folderID)
 	}

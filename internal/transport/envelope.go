@@ -63,7 +63,8 @@ func (e *Envelope) MarshalBinary() ([]byte, error) {
 
 // Encode writes the envelope directly to an io.Writer.
 func (e *Envelope) Encode(w io.Writer) error {
-	var hdr [512]byte // Sufficient for most metadata (SID + TargetAddr)
+	hdrSize := 2 + len(e.SessionID) + 8 + 1 + len(e.TargetAddr) + 1 + 4
+	hdr := make([]byte, hdrSize)
 	hdr[0] = MagicByte
 	hdr[1] = uint8(len(e.SessionID))
 	copy(hdr[2:], e.SessionID)
@@ -87,7 +88,7 @@ func (e *Envelope) Encode(w io.Writer) error {
 	binary.BigEndian.PutUint32(hdr[offset:], uint32(len(e.Payload)))
 	offset += 4
 
-	if _, err := w.Write(hdr[:offset]); err != nil {
+	if _, err := w.Write(hdr); err != nil {
 		return err
 	}
 	if len(e.Payload) > 0 {
@@ -135,7 +136,10 @@ func (e *Envelope) UnmarshalBinary(data []byte) (int, error) {
 	if len(data) < offset+4 { return 0, io.ErrUnexpectedEOF }
 	payloadLen := int(binary.BigEndian.Uint32(data[offset:]))
 	offset += 4
-	
+
+	if payloadLen > 10*1024*1024 {
+		return 0, fmt.Errorf("packet too large: %d", payloadLen)
+	}
 	if len(data) < offset+payloadLen { return 0, io.ErrUnexpectedEOF }
 	e.Payload = make([]byte, payloadLen)
 	copy(e.Payload, data[offset:offset+payloadLen])

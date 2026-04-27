@@ -135,7 +135,7 @@ func (e *Engine) flushAll(ctx context.Context) {
 		s.mu.Lock()
 
 		// Idle Timeout check
-		if time.Since(s.lastActivity) > 10*time.Second {
+		if time.Since(s.lastActivity) > 60*time.Second {
 			s.closed = true
 		}
 
