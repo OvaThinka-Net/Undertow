@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Undertow</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        background: #0d1117;
+        color: #c9d1d9;
+        min-height: 100vh;
+    }
+    .header {
+        background: #161b22;
+        border-bottom: 1px solid #30363d;
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .header h1 { font-size: 20px; font-weight: 600; color: #58a6ff; }
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 500;
+    }
+    .status-badge.connected { background: #0d3117; color: #3fb950; border: 1px solid #238636; }
+    .status-badge.disconnected { background: #2d1117; color: #f85149; border: 1px solid #6e3630; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .connected .status-dot { background: #3fb950; }
+    .disconnected .status-dot { background: #f85149; }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 24px; }
+
+    .card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        overflow: hidden;
+    }
+    .card-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #30363d;
+        font-size: 14px;
+        font-weight: 600;
+        color: #e6edf3;
+    }
+    .card-body { padding: 16px; }
+
+    .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    button {
+        padding: 8px 20px;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        font-size: 14px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.15s;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-connect { background: #238636; color: #fff; border-color: #2ea043; }
+    .btn-connect:hover:not(:disabled) { background: #2ea043; }
+    .btn-disconnect { background: #da3633; color: #fff; border-color: #f85149; }
+    .btn-disconnect:hover:not(:disabled) { background: #b62324; }
+    .btn-secondary { background: #21262d; color: #c9d1d9; border-color: #30363d; }
+    .btn-secondary:hover:not(:disabled) { background: #30363d; }
+
+    .log-container {
+        background: #010409;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        height: 320px;
+        overflow-y: auto;
+        font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.7;
+        padding: 8px 12px;
+    }
+    .log-line .time { color: #484f58; margin-right: 8px; }
+    .log-line .msg { color: #c9d1d9; }
+    .log-line.error .msg { color: #f85149; }
+    .log-line.warn .msg { color: #d29922; }
+
+    textarea {
+        width: 100%;
+        min-height: 180px;
+        background: #010409;
+        color: #c9d1d9;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 12px;
+        font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        resize: vertical;
+    }
+    textarea:focus { outline: none; border-color: #58a6ff; }
+    .config-actions { margin-top: 12px; display: flex; gap: 8px; }
+
+    .setup-warn {
+        background: #2d1b00;
+        border: 1px solid #6e4b00;
+        border-radius: 6px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        color: #d29922;
+        font-size: 13px;
+        display: none;
+    }
+    .setup-warn.show { display: block; }
+
+    .toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 6px;
+        font-size: 13px;
+        opacity: 0;
+        transition: opacity 0.3s;
+        z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+    .toast.success { background: #238636; color: #fff; }
+    .toast.error { background: #da3633; color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>&#x1F30A; Undertow</h1>
+    <div id="statusBadge" class="status-badge disconnected">
+        <span class="status-dot"></span>
+        <span id="statusText">Disconnected</span>
+    </div>
+</div>
+
+<div class="container">
+    <div id="setupWarn" class="setup-warn">
+        &#x26A0;&#xFE0F; Setup incomplete. Place <code>credentials.json</code> and <code>client_config.json</code> in the config folder, or use the admin panel to download a client package.
+    </div>
+
+    <div class="card">
+        <div class="card-header">Connection</div>
+        <div class="card-body">
+            <div class="controls">
+                <button id="btnConnect" class="btn-connect" onclick="doConnect()">Connect</button>
+                <button id="btnDisconnect" class="btn-disconnect" onclick="doDisconnect()" disabled>Disconnect</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Logs</div>
+        <div class="card-body" style="padding: 8px;">
+            <div id="logs" class="log-container"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Configuration</div>
+        <div class="card-body">
+            <textarea id="configEditor" spellcheck="false"></textarea>
+            <div class="config-actions">
+                <button class="btn-secondary" onclick="loadConfig()">Reload</button>
+                <button class="btn-connect" onclick="saveConfig()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const logsEl = document.getElementById('logs');
+const btnConnect = document.getElementById('btnConnect');
+const btnDisconnect = document.getElementById('btnDisconnect');
+const statusBadge = document.getElementById('statusBadge');
+const statusText = document.getElementById('statusText');
+const configEditor = document.getElementById('configEditor');
+const setupWarn = document.getElementById('setupWarn');
+
+function updateUI(connected) {
+    btnConnect.disabled = connected;
+    btnDisconnect.disabled = !connected;
+    statusBadge.className = 'status-badge ' + (connected ? 'connected' : 'disconnected');
+    statusText.textContent = connected ? 'Connected' : 'Disconnected';
+    document.title = 'Undertow — ' + (connected ? 'Connected' : 'Disconnected');
+}
+
+function toast(msg, type) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast ' + type + ' show';
+    setTimeout(() => el.className = 'toast', 3000);
+}
+
+async function doConnect() {
+    btnConnect.disabled = true;
+    btnConnect.textContent = 'Connecting...';
+    try {
+        const res = await fetch('/api/connect', { method: 'POST' });
+        const data = await res.json();
+        if (data.error) {
+            toast(data.error, 'error');
+            btnConnect.disabled = false;
+        } else {
+            updateUI(true);
+            toast('Connected', 'success');
+        }
+    } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+        btnConnect.disabled = false;
+    }
+    btnConnect.textContent = 'Connect';
+}
+
+async function doDisconnect() {
+    btnDisconnect.disabled = true;
+    btnDisconnect.textContent = 'Disconnecting...';
+    try {
+        await fetch('/api/disconnect', { method: 'POST' });
+        updateUI(false);
+        toast('Disconnected', 'success');
+    } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+    }
+    btnDisconnect.textContent = 'Disconnect';
+}
+
+function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function addLog(entry) {
+    const div = document.createElement('div');
+    div.className = 'log-line';
+    const msg = entry.message || '';
+    if (msg.includes('Error') || msg.includes('error') || msg.includes('FATAL')) div.className += ' error';
+    else if (msg.includes('BLOCKED') || msg.includes('Warning') || msg.includes('warning')) div.className += ' warn';
+
+    const t = new Date(entry.time).toLocaleTimeString();
+    div.innerHTML = '<span class="time">' + t + '</span><span class="msg">' + escapeHtml(msg) + '</span>';
+    logsEl.appendChild(div);
+
+    // Keep max 500 lines in DOM
+    while (logsEl.children.length > 500) logsEl.removeChild(logsEl.firstChild);
+    logsEl.scrollTop = logsEl.scrollHeight;
+}
+
+let evtSource;
+function startLogStream() {
+    if (evtSource) evtSource.close();
+    evtSource = new EventSource('/api/logs');
+    evtSource.onmessage = function(e) {
+        try { addLog(JSON.parse(e.data)); } catch (_) {}
+    };
+    evtSource.onerror = function() {
+        evtSource.close();
+        setTimeout(startLogStream, 3000);
+    };
+}
+
+async function loadConfig() {
+    try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        if (data.error) {
+            configEditor.value = '// ' + data.error;
+        } else {
+            configEditor.value = JSON.stringify(data, null, 2);
+        }
+    } catch (e) {
+        configEditor.value = '// Failed to load config';
+    }
+}
+
+async function saveConfig() {
+    try {
+        JSON.parse(configEditor.value); // validate
+    } catch (_) {
+        toast('Invalid JSON', 'error');
+        return;
+    }
+    try {
+        const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: configEditor.value
+        });
+        const data = await res.json();
+        if (data.error) toast('Save failed: ' + data.error, 'error');
+        else toast('Config saved — reconnect to apply', 'success');
+    } catch (e) {
+        toast('Save failed: ' + e.message, 'error');
+    }
+}
+
+async function pollStatus() {
+    try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        updateUI(data.connected);
+        setupWarn.className = 'setup-warn' + ((!data.has_creds || !data.has_config) ? ' show' : '');
+    } catch (_) {}
+}
+
+// Init
+loadConfig();
+startLogStream();
+pollStatus();
+setInterval(pollStatus, 5000);
+</script>
+</body>
+</html>
