@@ -49,9 +49,9 @@ func NewEngine(backend storage.Backend, isClient bool, clientID string) *Engine 
 		sessions:       make(map[string]*Session),
 		closedSessions: make(map[string]time.Time),
 		processed:      make(map[string]bool),
-		// Default intervals: Poll (RX) fast for responsiveness, Flush (TX) slower for gathering
+		// Default intervals: Poll (RX) fast for responsiveness, Flush (TX) tight for low latency
 		pollTicker:  500 * time.Millisecond,
-		flushTicker: 300 * time.Millisecond,
+		flushTicker: 150 * time.Millisecond,
 	}
 	if isClient {
 		e.myDir = DirReq
@@ -60,8 +60,8 @@ func NewEngine(backend storage.Backend, isClient bool, clientID string) *Engine 
 		e.myDir = DirRes
 		e.peerDir = DirReq
 	}
-	// Limit to 8 concurrent upload/download operations to avoid OOM and FD exhaustion
-	e.sem = make(chan struct{}, 8)
+	// Limit to 16 concurrent upload/download operations for higher throughput
+	e.sem = make(chan struct{}, 16)
 	return e
 }
 
@@ -69,7 +69,7 @@ func (e *Engine) SetRefreshRate(ms int) {
 	if ms > 0 {
 		e.pollTicker = time.Duration(ms) * time.Millisecond
 		// Legacy behavior: sets both if FlushTicker was still at default
-		if e.flushTicker == 300*time.Millisecond {
+		if e.flushTicker == 150*time.Millisecond {
 			e.flushTicker = time.Duration(ms) * time.Millisecond
 		}
 	}
@@ -279,6 +279,10 @@ func (e *Engine) pollLoop(ctx context.Context) {
 
 			// We found files! Let's download them in parallel to boost speed massively
 			var wg sync.WaitGroup
+			var staleFiles []string // Collect stale files for batch delete
+			var processedFiles []string
+			var processedMu2 sync.Mutex
+
 			for _, f := range files {
 				// STARTUP OPTIMIZATION: Ignore files older than 5 minutes to avoid memory spikes on restart
 				parts := strings.Split(f, "-")
@@ -287,7 +291,7 @@ func (e *Engine) pollLoop(ctx context.Context) {
 					tsStr = strings.TrimSuffix(tsStr, ".bin")
 					ts, _ := strconv.ParseInt(tsStr, 10, 64)
 					if ts > 0 && time.Since(time.Unix(0, ts)) > 5*time.Minute {
-						e.backend.Delete(ctx, f) // Silent cleanup
+						staleFiles = append(staleFiles, f)
 						continue
 					}
 				}
@@ -310,7 +314,6 @@ func (e *Engine) pollLoop(ctx context.Context) {
 					e.sem <- struct{}{}        // Acquire
 					defer func() { <-e.sem }() // Release
 
-					// log.Printf("Engine.pollLoop: Downloading %s", fname)
 					rc, err := e.backend.Download(ctx, fname)
 					if err != nil {
 						log.Printf("download error %s: %v", fname, err)
@@ -366,16 +369,33 @@ func (e *Engine) pollLoop(ctx context.Context) {
 						}
 					}
 
-					e.backend.Delete(ctx, fname)
+					// Collect for batch delete instead of individual deletes
+					processedMu2.Lock()
+					processedFiles = append(processedFiles, fname)
+					processedMu2.Unlock()
 				}(f)
 			}
 
 			// Wait for parallel batch to finish
 			wg.Wait()
 
+			// Batch delete all processed + stale files in one API call
+			toDelete := append(staleFiles, processedFiles...)
+			if len(toDelete) > 0 {
+				go func(files []string) {
+					if err := e.backend.BatchDelete(ctx, files); err != nil {
+						log.Printf("batch delete error: %v", err)
+						// Fallback: delete individually
+						for _, f := range files {
+							e.backend.Delete(ctx, f)
+						}
+					}
+				}(toDelete)
+			}
+
 			// Adaptive Polling: Because we just received data, the connection is active.
-			// Instead of jumping back to the select, immediately poll again after a tiny 100ms break to drain queues.
-			time.Sleep(100 * time.Millisecond)
+			// Instead of jumping back to the select, immediately poll again after a tiny 50ms break to drain queues.
+			time.Sleep(50 * time.Millisecond)
 			goto pollAgain
 		}
 	}

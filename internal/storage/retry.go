@@ -117,6 +117,25 @@ func (r *RetryBackend) Delete(ctx context.Context, filename string) error {
 	return fmt.Errorf("retry: delete %s failed after %d attempts: %w", filename, maxRetries+1, lastErr)
 }
 
+func (r *RetryBackend) BatchDelete(ctx context.Context, filenames []string) error {
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := baseRetryDelay * (1 << (attempt - 1))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+		lastErr = r.Inner.BatchDelete(ctx, filenames)
+		if lastErr == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("retry: batch delete failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+
 func (r *RetryBackend) CreateFolder(ctx context.Context, name string) (string, error) {
 	return r.Inner.CreateFolder(ctx, name)
 }

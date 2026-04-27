@@ -2,7 +2,7 @@
   "storage_type": "google",
   "google_folder_id": "REDACTED_FOLDER_ID",
   "refresh_rate_ms": 100,
-  "flush_rate_ms": 300,
+  "flush_rate_ms": 150,
   "transport": {
     "TargetIP": "",
     "SNI": "",

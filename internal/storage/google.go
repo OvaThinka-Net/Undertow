@@ -416,6 +416,86 @@ func (b *GoogleBackend) Delete(ctx context.Context, filename string) error {
 	return nil
 }
 
+// BatchDelete removes multiple files in a single HTTP request using Google's batch API.
+// This is significantly faster than individual Delete calls when cleaning up many files.
+// Google allows up to 100 requests per batch.
+func (b *GoogleBackend) BatchDelete(ctx context.Context, filenames []string) error {
+	if len(filenames) == 0 {
+		return nil
+	}
+
+	// Collect file IDs
+	b.fileIdsMu.RLock()
+	type idPair struct {
+		name string
+		id   string
+	}
+	var pairs []idPair
+	for _, name := range filenames {
+		if fid, ok := b.fileIDs[name]; ok {
+			pairs = append(pairs, idPair{name, fid})
+		}
+	}
+	b.fileIdsMu.RUnlock()
+
+	if len(pairs) == 0 {
+		return nil
+	}
+
+	tok, err := b.getValidToken(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Google batch API: max 100 per batch
+	const batchSize = 100
+	for i := 0; i < len(pairs); i += batchSize {
+		end := i + batchSize
+		if end > len(pairs) {
+			end = len(pairs)
+		}
+		chunk := pairs[i:end]
+
+		// Build multipart/mixed body
+		var buf bytes.Buffer
+		writer := multipart.NewWriter(&buf)
+		// Override boundary prefix to "batch_" for Google compatibility
+		for idx, p := range chunk {
+			partHeader := make(textproto.MIMEHeader)
+			partHeader.Set("Content-Type", "application/http")
+			partHeader.Set("Content-ID", fmt.Sprintf("<%d>", idx))
+			part, err := writer.CreatePart(partHeader)
+			if err != nil {
+				return fmt.Errorf("batch: create part: %w", err)
+			}
+			fmt.Fprintf(part, "DELETE /drive/v3/files/%s HTTP/1.1\r\n\r\n", p.id)
+		}
+		writer.Close()
+
+		req, err := http.NewRequestWithContext(ctx, "POST", "https://www.googleapis.com/batch/drive/v3", &buf)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Content-Type", "multipart/mixed; boundary="+writer.Boundary())
+
+		resp, err := b.httpClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("batch delete request: %w", err)
+		}
+		resp.Body.Close()
+
+		// Clean up cache regardless of individual results
+		b.fileIdsMu.Lock()
+		for _, p := range chunk {
+			delete(b.fileIDs, p.name)
+		}
+		b.fileIdsMu.Unlock()
+	}
+
+	return nil
+}
+
 func (b *GoogleBackend) CreateFolder(ctx context.Context, name string) (string, error) {
 	tok, err := b.getValidToken(ctx)
 	if err != nil {
