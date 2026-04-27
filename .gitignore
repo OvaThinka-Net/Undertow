@@ -11,6 +11,7 @@ release/
 /client
 /server
 /tray
+/gui
 
 # Misc
 *.tmp
@@ -22,5 +23,3 @@ release/
 *.token
 CLAUDE.md
 AUDIT.md
-gui
-tray
