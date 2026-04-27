@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/getlantern/systray"
 )
@@ -87,6 +88,20 @@ func main() {
 	}
 	appDataDir = filepath.Join(home, ".undertow")
 	os.MkdirAll(appDataDir, 0700)
+
+	// Log to a file so we can diagnose startup issues (especially on Windows
+	// where there is no console).
+	if lf, err := os.OpenFile(filepath.Join(appDataDir, "startup.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644); err == nil {
+		log.SetOutput(lf)
+		log.SetFlags(log.Ldate | log.Ltime)
+		log.Printf("Undertow starting, exe=%s", os.Args[0])
+	}
+
+	// Wait briefly so the Windows shell (explorer.exe) is ready for
+	// Shell_NotifyIcon. Without this, systray.Run can fail silently
+	// when launched from the registry Run key at boot.
+	time.Sleep(3 * time.Second)
 
 	// First-run: auto-copy config files from next to the binary
 	firstRunSetup()
