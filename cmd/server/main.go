@@ -143,6 +143,8 @@ func handleServerConn(sessionID, targetAddr string, session *transport.Session, 
 				"Content-Length: 0\r\n" +
 				"Connection: close\r\n\r\n"
 			session.EnqueueTx([]byte(redirect))
+			// Wait for the flush loop to pick up the response before RemoveSession
+			time.Sleep(3 * time.Second)
 			return
 		}
 	}
