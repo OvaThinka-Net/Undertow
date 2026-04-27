@@ -1,10 +1,11 @@
+//go:build darwin
+
 package main
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"text/template"
 )
 
@@ -38,22 +39,16 @@ func plistPath() string {
 }
 
 func isAutoStartEnabled() bool {
-	if runtime.GOOS != "darwin" {
-		return false
-	}
 	_, err := os.Stat(plistPath())
 	return err == nil
 }
 
 func enableAutoStart() error {
-	if runtime.GOOS != "darwin" {
-		return fmt.Errorf("auto-start only supported on macOS")
-	}
-
 	exePath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolve executable: %w", err)
 	}
+	// Resolve symlinks to get the real path
 	exePath, err = filepath.EvalSymlinks(exePath)
 	if err != nil {
 		return fmt.Errorf("resolve symlinks: %w", err)
@@ -81,9 +76,6 @@ func enableAutoStart() error {
 }
 
 func disableAutoStart() error {
-	if runtime.GOOS != "darwin" {
-		return nil
-	}
 	err := os.Remove(plistPath())
 	if os.IsNotExist(err) {
 		return nil

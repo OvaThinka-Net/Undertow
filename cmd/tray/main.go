@@ -165,7 +165,7 @@ func onReady() {
 
 	systray.AddSeparator()
 	mProxy := systray.AddMenuItemCheckbox("Set System Proxy", "Auto-configure SOCKS proxy", true)
-	mAutoStart := systray.AddMenuItemCheckbox("Start at Login", "Launch Undertow on macOS login", isAutoStartEnabled())
+	mAutoStart := systray.AddMenuItemCheckbox("Start at Login", "Launch Undertow at login", isAutoStartEnabled())
 
 	systray.AddSeparator()
 	mDashboard := systray.AddMenuItem("Dashboard", "Open web dashboard")

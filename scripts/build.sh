@@ -67,13 +67,26 @@ for platform in "${platforms[@]}"; do
             go build -ldflags="-s -w -X main.Version=${VERSION}" -trimpath -o "$OUT/clients/$CP_NAME" ./cmd/client
     done
 
-    # Build tray app (GUI) for macOS only (requires CGO for systray)
-    for tp_platform in "darwin/arm64" "darwin/amd64"; do
+    # Build tray app (GUI) — requires CGO for systray
+    # macOS + Windows (Windows needs mingw-w64 cross-compiler when building from macOS)
+    for tp_platform in "darwin/arm64" "darwin/amd64" "windows/amd64" "windows/arm64"; do
         IFS='/' read -r TP_OS TP_ARCH <<< "$tp_platform"
-        TP_NAME="Undertow-GUI-${TP_OS}-${TP_ARCH}"
+        TP_SUFFIX=""
+        TP_LDFLAGS="-s -w"
+        if [[ "$TP_OS" == "windows" ]]; then
+            TP_SUFFIX=".exe"
+            TP_LDFLAGS="$TP_LDFLAGS -H windowsgui"
+            [[ "$TP_ARCH" == "amd64" ]] && export CC="x86_64-w64-mingw32-gcc"
+            [[ "$TP_ARCH" == "arm64" ]] && export CC="aarch64-w64-mingw32-gcc"
+        else
+            unset CC
+        fi
+        TP_NAME="Undertow-GUI-${TP_OS}-${TP_ARCH}${TP_SUFFIX}"
         CGO_ENABLED=1 GOOS="$TP_OS" GOARCH="$TP_ARCH" \
-            go build -ldflags="-s -w" -trimpath -o "$OUT/clients/$TP_NAME" ./cmd/tray
+            go build -ldflags="$TP_LDFLAGS" -trimpath -o "$OUT/clients/$TP_NAME" ./cmd/tray || \
+            echo "  (skipped $TP_NAME — CGO cross-compiler not available)"
     done
+    unset CC
 
     # Build web GUI (no CGO, cross-compiles everywhere)
     for gp_platform in "darwin/arm64" "darwin/amd64" "windows/amd64" "windows/arm64"; do
