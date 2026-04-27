@@ -265,21 +265,16 @@ function addLog(entry) {
 }
 
 let logCount = 0;
-async function pollLogs() {
-    try {
-        const res = await fetch('/api/logs');
-        const entries = await res.json();
-        if (!Array.isArray(entries)) return;
-        // If buffer wrapped (entries got trimmed), reset
-        if (entries.length < logCount) {
-            logsEl.innerHTML = '';
-            logCount = 0;
-        }
-        for (let i = logCount; i < entries.length; i++) {
-            addLog(entries[i]);
-        }
-        logCount = entries.length;
-    } catch (_) {}
+function renderLogs(entries) {
+    if (!Array.isArray(entries)) return;
+    if (entries.length < logCount) {
+        logsEl.innerHTML = '';
+        logCount = 0;
+    }
+    for (let i = logCount; i < entries.length; i++) {
+        addLog(entries[i]);
+    }
+    logCount = entries.length;
 }
 
 async function loadConfig() {
@@ -330,6 +325,9 @@ async function pollStatus() {
             row.style.display = 'block';
             document.getElementById('chkAutoStart').checked = !!data.autostart;
         }
+
+        // Render logs from the same response
+        if (data.logs) renderLogs(data.logs);
     } catch (_) {}
 }
 
@@ -355,10 +353,8 @@ async function toggleAutoStart(enabled) {
 
 // Init
 loadConfig();
-pollLogs();
-setInterval(pollLogs, 1000);
 pollStatus();
-setInterval(pollStatus, 5000);
+setInterval(pollStatus, 1000);
 </script>
 </body>
 </html>

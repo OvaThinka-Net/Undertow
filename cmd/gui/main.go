@@ -262,6 +262,7 @@ func startDashboard(tunnel *Tunnel, logs *LogBuffer, dataDir string) int {
 			"version":    Version,
 			"autostart":  isAutoStartEnabled(),
 			"os":         runtime.GOOS,
+			"logs":       logs.Lines(),
 		})
 	})
 
@@ -321,11 +322,6 @@ func startDashboard(tunnel *Tunnel, logs *LogBuffer, dataDir string) int {
 		json.NewEncoder(w).Encode(map[string]string{"ok": "disconnected"})
 	})
 
-	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-cache")
-		json.NewEncoder(w).Encode(logs.Lines())
-	})
 
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		configPath := filepath.Join(dataDir, "client_config.json")
