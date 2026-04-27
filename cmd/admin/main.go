@@ -290,7 +290,13 @@ func (pm *ProcessManager) Stop() error {
 func (pm *ProcessManager) pipeReader(pipe io.ReadCloser, source string) {
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
-		pm.logs.Add(source, scanner.Text())
+		line := scanner.Text()
+		// Strip Go's default log timestamp prefix (e.g. "2006/01/02 15:04:05 ")
+		// to avoid duplicate timestamps since LogBuffer.Add adds its own
+		if len(line) >= 20 && line[4] == '/' && line[7] == '/' && line[10] == ' ' && line[13] == ':' && line[16] == ':' && line[19] == ' ' {
+			line = line[20:]
+		}
+		pm.logs.Add(source, line)
 	}
 }
 
