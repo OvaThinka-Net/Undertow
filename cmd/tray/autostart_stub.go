@@ -16,3 +16,5 @@ func enableAutoStart() error {
 func disableAutoStart() error {
 	return nil
 }
+
+func ensureAutoStartPath() {}

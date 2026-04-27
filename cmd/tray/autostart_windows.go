@@ -23,6 +23,32 @@ func isAutoStartEnabled() bool {
 	return err == nil
 }
 
+// ensureAutoStartPath updates the registry entry to point to the current
+// executable, in case the user moved it since the last run.
+func ensureAutoStartPath() {
+	exePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return
+	}
+	quoted := `"` + exePath + `"`
+
+	k, err := registry.OpenKey(registry.CURRENT_USER,
+		`Software\Microsoft\Windows\CurrentVersion\Run`, registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+
+	current, _, err := k.GetStringValue(regValue)
+	if err != nil || current != quoted {
+		k.SetStringValue(regValue, quoted)
+	}
+}
+
 func enableAutoStart() error {
 	exePath, err := os.Executable()
 	if err != nil {

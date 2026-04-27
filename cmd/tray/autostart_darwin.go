@@ -82,3 +82,5 @@ func disableAutoStart() error {
 	}
 	return err
 }
+
+func ensureAutoStartPath() {}

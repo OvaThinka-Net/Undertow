@@ -102,6 +102,8 @@ func main() {
 			log.Println("Auto-start enabled")
 		}
 	}
+	// Keep registry path in sync if the exe was moved
+	ensureAutoStartPath()
 
 	systray.Run(onReady, onExit)
 }
