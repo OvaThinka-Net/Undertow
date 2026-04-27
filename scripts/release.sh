@@ -40,7 +40,7 @@ gh release create "$TAG" \
 
 ### One-Line Install (Linux)
 \`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/${REPO}/main/setup.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/${REPO}/${TAG}/setup.sh | sudo bash
 \`\`\`
 Auto-detects architecture, downloads, installs, and starts the service.
 

@@ -36,6 +36,16 @@ The **easiest way** to set up Undertow is through the web admin panel. It includ
 
 ساده‌ترین راه برای راه‌اندازی Undertow استفاده از پنل مدیریت وب است. این پنل شامل یک ویزارد گام‌به‌گام است که شما را در تمام مراحل راهنمایی می‌کند.
 
+### One-Line Install (Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OvaThinka-Net/Undertow/main/setup.sh | sudo bash
+```
+
+Auto-detects architecture, downloads the latest release, installs to `/opt/undertow`, and starts the systemd service. Then open `http://your-server-ip:8090` and follow the wizard.
+
+### Manual Build & Deploy
+
 ### 1. Build & Deploy Admin
 
 ```bash
