@@ -1307,22 +1307,22 @@ Config folder: ~/.undertow/
 
 Platform: %s
 
+IMPORTANT FIRST STEP — Unblock the files:
+  Double-click "Unblock.cmd" once.
+  Without this, Windows blocks the app from auto-starting at login.
+
 Quick Start:
 1. Double-click %s to launch
 2. A tray icon (grey circle) appears in the Windows notification area
-3. Click it → "Connect"
-4. The icon turns green — you're connected!
+   (it may be hidden — click the ^ arrow to show all icons)
+3. The tunnel auto-connects on startup — icon turns green when ready
+4. To disconnect: click the tray icon → "Disconnect"
+5. To quit: click the tray icon → "Quit"
 
-The app automatically sets your system SOCKS proxy.
-All your internet traffic now goes through the tunnel.
-
-To disconnect: click the tray icon → "Disconnect"
-To quit: click the tray icon → "Quit"
-
-Auto-start: click the tray icon → "Start at Login"
-  (adds to HKCU\Software\Microsoft\Windows\CurrentVersion\Run)
+Auto-start at login is enabled automatically on first run.
 Dashboard: click the tray icon → "Dashboard" to open the web UI
 Config folder: %%USERPROFILE%%\.undertow\
+Logs: %%USERPROFILE%%\.undertow\startup.log
 `, label, binFile)
 	} else if strings.Contains(platform, "windows") {
 		readme = fmt.Sprintf(`Undertow Client
@@ -1374,6 +1374,18 @@ read
 		lh.SetMode(0755)
 		lw, _ := zw.CreateHeader(lh)
 		lw.Write([]byte(launcherScript))
+	}
+
+	// Add Unblock.cmd for Windows so users can clear Mark-of-the-Web in one click
+	if strings.Contains(platform, "windows") {
+		unblockScript := "@echo off\r\n" +
+			"powershell -NoProfile -Command \"Get-ChildItem -Path '%~dp0' -Recurse | Unblock-File\"\r\n" +
+			"echo.\r\n" +
+			"echo Files unblocked. You can now run Undertow.\r\n" +
+			"pause\r\n"
+		uh := &zip.FileHeader{Name: "undertow-client/Unblock.cmd", Method: zip.Deflate}
+		uw, _ := zw.CreateHeader(uh)
+		uw.Write([]byte(unblockScript))
 	}
 
 	zw.Close()

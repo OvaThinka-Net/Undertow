@@ -83,16 +83,6 @@ func (a *appState) doDisconnect() {
 }
 
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("PANIC in main: %v", r)
-			if startupLog != nil {
-				startupLog.Sync()
-			}
-			os.Exit(1)
-		}
-	}()
-
 	home, err := os.UserHomeDir()
 	if err != nil {
 		log.Fatal(err)
@@ -100,45 +90,22 @@ func main() {
 	appDataDir = filepath.Join(home, ".undertow")
 	os.MkdirAll(appDataDir, 0700)
 
-	// Log to a file so we can diagnose startup issues (especially on Windows
-	// where there is no console).
+	// Log to a file so users / support can diagnose issues.
 	startupLog, _ = os.OpenFile(filepath.Join(appDataDir, "startup.log"),
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if startupLog != nil {
 		log.SetOutput(startupLog)
 		log.SetFlags(log.Ldate | log.Ltime)
 		log.Printf("=== Undertow starting, exe=%s ===", os.Args[0])
-		startupLog.Sync()
 	}
 
 	// Wait briefly so the Windows shell (explorer.exe) is ready for
-	// Shell_NotifyIcon. Without this, systray.Run can fail silently
-	// when launched from the registry Run key at boot.
-	log.Println("Step 1: sleep 3s for shell ready")
-	if startupLog != nil {
-		startupLog.Sync()
-	}
+	// Shell_NotifyIcon when launched at boot.
 	time.Sleep(3 * time.Second)
 
-	// First-run: auto-copy config files from next to the binary
-	log.Println("Step 2: firstRunSetup")
-	if startupLog != nil {
-		startupLog.Sync()
-	}
 	firstRunSetup()
-
-	// Remove any leftover system proxy from previous versions
-	log.Println("Step 3: disableProxy")
-	if startupLog != nil {
-		startupLog.Sync()
-	}
 	disableProxy()
 
-	// Auto-enable start-at-login on first run
-	log.Println("Step 4: autostart check")
-	if startupLog != nil {
-		startupLog.Sync()
-	}
 	if !isAutoStartEnabled() {
 		if err := enableAutoStart(); err != nil {
 			log.Printf("Warning: failed to enable auto-start: %v", err)
@@ -146,19 +113,9 @@ func main() {
 			log.Println("Auto-start enabled")
 		}
 	}
-	// Keep registry path in sync if the exe was moved
-	log.Println("Step 5: ensureAutoStartPath")
-	if startupLog != nil {
-		startupLog.Sync()
-	}
 	ensureAutoStartPath()
 
-	log.Println("Step 6: Calling systray.Run...")
-	if startupLog != nil {
-		startupLog.Sync()
-	}
 	systray.Run(onReady, onExit)
-	log.Println("systray.Run returned")
 }
 
 // firstRunSetup copies credentials.json, token, and client_config.json from
@@ -207,7 +164,6 @@ func (s safeWriter) Write(p []byte) (int, error) {
 }
 
 func onReady() {
-	log.Println("onReady called")
 	logs := NewLogBuffer(1000)
 	writers := []io.Writer{logs, safeWriter{os.Stderr}}
 	if startupLog != nil {
@@ -261,6 +217,11 @@ func onReady() {
 	} else {
 		// Auto-connect on startup
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("PANIC in auto-connect: %v", r)
+				}
+			}()
 			log.Println("Auto-connecting...")
 			app.mConnect.Disable()
 			app.mStatus.SetTitle("Status: Connecting...")
