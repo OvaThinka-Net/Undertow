@@ -1262,7 +1262,7 @@ echo ""
 echo "Undertow has stopped. Press Enter to close."
 read
 `, binFile, binFile, binFile)
-		lh := &zip.FileHeader{Name: "undertow-client/Start Undertow.command", Method: zip.Deflate}
+		lh := &zip.FileHeader{Name: "undertow-client/StartUndertow.command", Method: zip.Deflate}
 		lh.SetMode(0755)
 		lw, _ := zw.CreateHeader(lh)
 		lw.Write([]byte(launcherScript))
