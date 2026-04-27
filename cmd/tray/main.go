@@ -6,15 +6,80 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"log"
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/getlantern/systray"
 )
 
-var appDataDir string
+var (
+	appDataDir string
+	app        *appState
+)
+
+type appState struct {
+	tunnel   *Tunnel
+	logs     *LogBuffer
+	dash     *Dashboard
+	useProxy bool
+	mu       sync.Mutex
+
+	mStatus     *systray.MenuItem
+	mConnect    *systray.MenuItem
+	mDisconnect *systray.MenuItem
+}
+
+func (a *appState) doConnect() error {
+	if a.tunnel.IsRunning() {
+		return fmt.Errorf("already connected")
+	}
+
+	if needsOAuth(appDataDir) {
+		log.Println("Starting OAuth flow...")
+		if err := doOAuth(appDataDir); err != nil {
+			return fmt.Errorf("OAuth: %w", err)
+		}
+	}
+
+	if err := a.tunnel.Start(); err != nil {
+		return err
+	}
+
+	a.mu.Lock()
+	if a.useProxy {
+		if err := enableProxy("127.0.0.1", 1080); err != nil {
+			log.Printf("Warning: failed to set system proxy: %v", err)
+		}
+	}
+	a.mu.Unlock()
+
+	systray.SetIcon(makeIcon(63, 185, 80, true))
+	systray.SetTooltip("Undertow — Connected")
+	a.mStatus.SetTitle("Status: Connected ✓")
+	a.mConnect.Disable()
+	a.mDisconnect.Enable()
+	return nil
+}
+
+func (a *appState) doDisconnect() {
+	a.mu.Lock()
+	if a.useProxy {
+		disableProxy()
+	}
+	a.mu.Unlock()
+
+	a.tunnel.Stop()
+
+	systray.SetIcon(makeIcon(140, 140, 140, false))
+	systray.SetTooltip("Undertow — Disconnected")
+	a.mStatus.SetTitle("Status: Disconnected")
+	a.mConnect.Enable()
+	a.mDisconnect.Disable()
+}
 
 func main() {
 	home, err := os.UserHomeDir()
@@ -40,7 +105,7 @@ func firstRunSetup() {
 	}
 	exeDir := filepath.Dir(exePath)
 
-	filesToCopy := []string{"credentials.json", "client_config.json"}
+	filesToCopy := []string{"credentials.json", "credentials.json.token", "client_config.json"}
 	for _, name := range filesToCopy {
 		dst := filepath.Join(appDataDir, name)
 		if fileExists(dst) {
@@ -55,7 +120,7 @@ func firstRunSetup() {
 			continue
 		}
 		perm := os.FileMode(0644)
-		if name == "credentials.json" {
+		if name == "credentials.json" || name == "credentials.json.token" {
 			perm = 0600
 		}
 		if err := os.WriteFile(dst, data, perm); err == nil {
@@ -65,104 +130,98 @@ func firstRunSetup() {
 }
 
 func onReady() {
+	logs := NewLogBuffer(1000)
+	log.SetOutput(io.MultiWriter(os.Stderr, logs))
+	log.SetFlags(log.Ltime)
+
+	tunnel := NewTunnel(appDataDir)
+
+	app = &appState{
+		tunnel:   tunnel,
+		logs:     logs,
+		useProxy: true,
+	}
+
+	// Start embedded dashboard
+	app.dash = NewDashboard(tunnel, logs, appDataDir)
+	app.dash.onConnect = app.doConnect
+	app.dash.onDisconnect = app.doDisconnect
+	if err := app.dash.Start(); err != nil {
+		log.Printf("Dashboard failed to start: %v", err)
+	} else {
+		log.Printf("Dashboard at %s", app.dash.URL())
+	}
+
 	systray.SetIcon(makeIcon(140, 140, 140, false))
 	systray.SetTooltip("Undertow — Disconnected")
 
-	mStatus := systray.AddMenuItem("Status: Disconnected", "")
-	mStatus.Disable()
+	app.mStatus = systray.AddMenuItem("Status: Disconnected", "")
+	app.mStatus.Disable()
 
 	systray.AddSeparator()
-	mConnect := systray.AddMenuItem("Connect", "Start the tunnel")
-	mDisconnect := systray.AddMenuItem("Disconnect", "Stop the tunnel")
-	mDisconnect.Disable()
+	app.mConnect = systray.AddMenuItem("Connect", "Start the tunnel")
+	app.mDisconnect = systray.AddMenuItem("Disconnect", "Stop the tunnel")
+	app.mDisconnect.Disable()
 
 	systray.AddSeparator()
-	mProxy := systray.AddMenuItemCheckbox("Set System Proxy", "Auto-configure macOS SOCKS proxy", true)
+	mProxy := systray.AddMenuItemCheckbox("Set System Proxy", "Auto-configure SOCKS proxy", true)
 
 	systray.AddSeparator()
+	mDashboard := systray.AddMenuItem("Dashboard", "Open web dashboard")
 	mOpenFolder := systray.AddMenuItem("Open Config Folder", "")
 	mQuit := systray.AddMenuItem("Quit", "")
 
-	tunnel := NewTunnel(appDataDir)
-	useProxy := true
-
 	// Check setup state
 	if !fileExists(filepath.Join(appDataDir, "credentials.json")) {
-		mStatus.SetTitle("⚠ Setup: credentials.json missing")
-		mConnect.Disable()
+		app.mStatus.SetTitle("⚠ Setup: credentials.json missing")
+		app.mConnect.Disable()
 	}
 
 	go func() {
 		for {
 			select {
-			case <-mConnect.ClickedCh:
-				mConnect.Disable()
-				mStatus.SetTitle("Status: Connecting...")
+			case <-app.mConnect.ClickedCh:
+				app.mConnect.Disable()
+				app.mStatus.SetTitle("Status: Connecting...")
 				systray.SetTooltip("Undertow — Connecting...")
 
-				// OAuth if needed
-				if needsOAuth(appDataDir) {
-					mStatus.SetTitle("Status: Waiting for OAuth...")
-					if err := doOAuth(appDataDir); err != nil {
-						mStatus.SetTitle(fmt.Sprintf("⚠ OAuth: %s", err))
-						mConnect.Enable()
-						continue
-					}
+				if err := app.doConnect(); err != nil {
+					app.mStatus.SetTitle(fmt.Sprintf("⚠ Error: %s", err))
+					app.mConnect.Enable()
 				}
 
-				if err := tunnel.Start(); err != nil {
-					mStatus.SetTitle(fmt.Sprintf("⚠ Error: %s", err))
-					mConnect.Enable()
-					continue
-				}
-
-				if useProxy {
-					if err := enableProxy("127.0.0.1", 1080); err != nil {
-						log.Printf("Warning: failed to set system proxy: %v", err)
-					}
-				}
-
-				systray.SetIcon(makeIcon(63, 185, 80, true))
-				systray.SetTooltip("Undertow — Connected")
-				mStatus.SetTitle("Status: Connected ✓")
-				mDisconnect.Enable()
-
-			case <-mDisconnect.ClickedCh:
-				mDisconnect.Disable()
-				mStatus.SetTitle("Status: Disconnecting...")
-
-				if useProxy {
-					disableProxy()
-				}
-				tunnel.Stop()
-
-				systray.SetIcon(makeIcon(140, 140, 140, false))
-				systray.SetTooltip("Undertow — Disconnected")
-				mStatus.SetTitle("Status: Disconnected")
-				mConnect.Enable()
+			case <-app.mDisconnect.ClickedCh:
+				app.mDisconnect.Disable()
+				app.mStatus.SetTitle("Status: Disconnecting...")
+				app.doDisconnect()
 
 			case <-mProxy.ClickedCh:
+				app.mu.Lock()
 				if mProxy.Checked() {
 					mProxy.Uncheck()
-					useProxy = false
-					if tunnel.IsRunning() {
+					app.useProxy = false
+					if app.tunnel.IsRunning() {
 						disableProxy()
 					}
 				} else {
 					mProxy.Check()
-					useProxy = true
-					if tunnel.IsRunning() {
+					app.useProxy = true
+					if app.tunnel.IsRunning() {
 						enableProxy("127.0.0.1", 1080)
 					}
 				}
+				app.mu.Unlock()
+
+			case <-mDashboard.ClickedCh:
+				app.dash.Open()
 
 			case <-mOpenFolder.ClickedCh:
 				openFolder(appDataDir)
 
 			case <-mQuit.ClickedCh:
-				if tunnel.IsRunning() {
+				if app.tunnel.IsRunning() {
 					disableProxy()
-					tunnel.Stop()
+					app.tunnel.Stop()
 				}
 				systray.Quit()
 			}

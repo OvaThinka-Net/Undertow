@@ -1126,8 +1126,12 @@ var knownPlatforms = []struct {
 }{
 	{"darwin-arm64", "macOS (Apple Silicon)", "Undertow-darwin-arm64"},
 	{"darwin-amd64", "macOS (Intel)", "Undertow-darwin-amd64"},
+	{"darwin-arm64-gui", "macOS GUI (Apple Silicon)", "Undertow-GUI-darwin-arm64"},
+	{"darwin-amd64-gui", "macOS GUI (Intel)", "Undertow-GUI-darwin-amd64"},
 	{"windows-amd64", "Windows (x86_64)", "Undertow-windows-amd64.exe"},
 	{"windows-arm64", "Windows (ARM64)", "Undertow-windows-arm64.exe"},
+	{"windows-amd64-gui", "Windows GUI (x86_64)", "Undertow-GUI-windows-amd64.exe"},
+	{"windows-arm64-gui", "Windows GUI (ARM64)", "Undertow-GUI-windows-arm64.exe"},
 	{"linux-amd64", "Linux (x86_64)", "client-linux-amd64"},
 	{"linux-arm64", "Linux (ARM64)", "client-linux-arm64"},
 }
@@ -1152,9 +1156,9 @@ func (pm *ProcessManager) handleClientPlatforms(w http.ResponseWriter, r *http.R
 	suggested := ""
 	switch {
 	case strings.Contains(ua, "macintosh") || strings.Contains(ua, "mac os"):
-		suggested = "darwin-arm64" // Apple Silicon is dominant; Intel users can switch manually
+		suggested = "darwin-arm64-gui"
 	case strings.Contains(ua, "windows"):
-		suggested = "windows-amd64"
+		suggested = "windows-amd64-gui"
 	case strings.Contains(ua, "linux"):
 		suggested = "linux-amd64"
 	}

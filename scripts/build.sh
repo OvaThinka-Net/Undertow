@@ -67,6 +67,16 @@ for platform in "${platforms[@]}"; do
             go build -ldflags="-s -w -X main.Version=${VERSION}" -trimpath -o "$OUT/clients/$CP_NAME" ./cmd/client
     done
 
+    # Build tray app (GUI) for macOS and Windows
+    for tp_platform in "darwin/arm64" "darwin/amd64" "windows/amd64" "windows/arm64"; do
+        IFS='/' read -r TP_OS TP_ARCH <<< "$tp_platform"
+        TP_SUFFIX=""
+        [[ "$TP_OS" == "windows" ]] && TP_SUFFIX=".exe"
+        TP_NAME="Undertow-GUI-${TP_OS}-${TP_ARCH}${TP_SUFFIX}"
+        CGO_ENABLED=0 GOOS="$TP_OS" GOARCH="$TP_ARCH" \
+            go build -ldflags="-s -w -X main.Version=${VERSION}" -trimpath -o "$OUT/clients/$TP_NAME" ./cmd/tray
+    done
+
     (cd "$RELEASE_DIR" && zip -qr "${FOLDER}.zip" "$FOLDER")
     rm -rf "$OUT"
 done
