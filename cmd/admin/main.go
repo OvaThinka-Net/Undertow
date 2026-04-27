@@ -1250,6 +1250,24 @@ Configure your browser or apps to use SOCKS5 proxy: 127.0.0.1:1080
 	rw, _ := zw.Create("undertow-client/README.txt")
 	rw.Write([]byte(readme))
 
+	// Add .command launcher for macOS platforms (opens in Terminal on double-click)
+	if strings.Contains(platform, "darwin") {
+		launcherScript := fmt.Sprintf(`#!/bin/bash
+cd "$(dirname "$0")"
+# Remove quarantine attribute if present
+xattr -d com.apple.quarantine "%s" 2>/dev/null
+chmod +x "%s"
+./%s
+echo ""
+echo "Undertow has stopped. Press Enter to close."
+read
+`, binFile, binFile, binFile)
+		lh := &zip.FileHeader{Name: "undertow-client/Start Undertow.command", Method: zip.Deflate}
+		lh.SetMode(0755)
+		lw, _ := zw.CreateHeader(lh)
+		lw.Write([]byte(launcherScript))
+	}
+
 	zw.Close()
 
 	zipName := fmt.Sprintf("undertow-client-%s.zip", platform)
