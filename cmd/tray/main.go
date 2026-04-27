@@ -91,6 +91,15 @@ func main() {
 	// First-run: auto-copy config files from next to the binary
 	firstRunSetup()
 
+	// Auto-enable start-at-login on first run
+	if !isAutoStartEnabled() {
+		if err := enableAutoStart(); err != nil {
+			log.Printf("Warning: failed to enable auto-start: %v", err)
+		} else {
+			log.Println("Auto-start enabled")
+		}
+	}
+
 	systray.Run(onReady, onExit)
 }
 

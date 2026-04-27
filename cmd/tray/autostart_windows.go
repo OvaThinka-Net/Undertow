@@ -32,7 +32,7 @@ func enableAutoStart() error {
 	}
 
 	return exec.Command("reg", "add", regKey,
-		"/v", regValue, "/t", "REG_SZ", "/d", exePath, "/f").Run()
+		"/v", regValue, "/t", "REG_SZ", "/d", `"`+exePath+`"`, "/f").Run()
 }
 
 func disableAutoStart() error {

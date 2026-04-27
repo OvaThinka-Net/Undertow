@@ -470,6 +470,15 @@ func main() {
 
 	tunnel := &Tunnel{dataDir: dataDir}
 
+	// Auto-enable start-at-login on first run
+	if !isAutoStartEnabled() {
+		if err := enableAutoStart(); err != nil {
+			log.Printf("Warning: failed to enable auto-start: %v", err)
+		} else {
+			log.Println("Auto-start enabled")
+		}
+	}
+
 	port := startDashboard(tunnel, logs, dataDir)
 	if port > 0 {
 		url := fmt.Sprintf("http://localhost:%d", port)
