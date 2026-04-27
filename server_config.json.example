@@ -1,6 +1,6 @@
 {
   "storage_type": "google",
-  "google_folder_id": "REDACTED_FOLDER_ID",
+  "google_folder_id": "",
   "refresh_rate_ms": 100,
   "flush_rate_ms": 150,
   "transport": {
