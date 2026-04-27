@@ -219,21 +219,33 @@ func onReady() {
 		app.mStatus.SetTitle("⚠ Setup: credentials.json missing")
 		app.mConnect.Disable()
 	} else {
-		// Auto-connect on startup
+		// Auto-connect on startup (with retry for boot-time network delays)
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("PANIC in auto-connect: %v", r)
 				}
 			}()
-			log.Println("Auto-connecting...")
-			app.mConnect.Disable()
-			app.mStatus.SetTitle("Status: Connecting...")
-			systray.SetTooltip("Undertow — Connecting...")
-			if err := app.doConnect(); err != nil {
-				log.Printf("Auto-connect failed: %v", err)
-				app.mStatus.SetTitle(fmt.Sprintf("⚠ Error: %s", err))
-				app.mConnect.Enable()
+
+			const maxRetries = 5
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				log.Printf("Auto-connecting (attempt %d/%d)...", attempt, maxRetries)
+				app.mConnect.Disable()
+				app.mStatus.SetTitle("Status: Connecting...")
+				systray.SetTooltip("Undertow — Connecting...")
+
+				if err := app.doConnect(); err != nil {
+					log.Printf("Auto-connect attempt %d failed: %v", attempt, err)
+					if attempt < maxRetries {
+						app.mStatus.SetTitle(fmt.Sprintf("⚠ Retrying in %ds...", attempt*3))
+						time.Sleep(time.Duration(attempt*3) * time.Second)
+						continue
+					}
+					app.mStatus.SetTitle(fmt.Sprintf("⚠ Error: %s", err))
+					app.mConnect.Enable()
+					return
+				}
+				return // connected successfully
 			}
 		}()
 	}
