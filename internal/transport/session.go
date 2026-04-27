@@ -72,8 +72,10 @@ func (s *Session) ClearTx() {
 
 func (s *Session) closeRxChan() {
 	s.closeOnce.Do(func() {
+		s.mu.Lock()
 		s.rxClosed = true
 		s.closed = true
+		s.mu.Unlock()
 		close(s.RxChan)
 	})
 }

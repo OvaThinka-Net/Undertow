@@ -37,8 +37,8 @@ type Engine struct {
 	// Concurrency control for storage operations (Upload/Download)
 	sem chan struct{}
 
-	// Track processed files to avoid duplicates
-	processed   map[string]bool
+	// Track processed files to avoid duplicates (value = insertion time for TTL eviction)
+	processed   map[string]time.Time
 	processedMu sync.Mutex
 }
 
@@ -48,7 +48,7 @@ func NewEngine(backend storage.Backend, isClient bool, clientID string) *Engine 
 		id:             clientID,
 		sessions:       make(map[string]*Session),
 		closedSessions: make(map[string]time.Time),
-		processed:      make(map[string]bool),
+		processed:      make(map[string]time.Time),
 		// Default intervals: Poll (RX) fast for responsiveness, Flush (TX) tight for low latency
 		pollTicker:  500 * time.Millisecond,
 		flushTicker: 150 * time.Millisecond,
@@ -297,9 +297,9 @@ func (e *Engine) pollLoop(ctx context.Context) {
 				}
 
 				e.processedMu.Lock()
-				already := e.processed[f]
+				_, already := e.processed[f]
 				if !already {
-					e.processed[f] = true
+					e.processed[f] = time.Now()
 				}
 				e.processedMu.Unlock()
 
@@ -434,10 +434,12 @@ func (e *Engine) cleanupLoop(ctx context.Context) {
 			}
 			e.closedSessionsMu.Unlock()
 
-			// Periodically clear processed map to prevent infinite growth
+			// Evict stale entries from processed map (older than 60s)
 			e.processedMu.Lock()
-			if len(e.processed) > 5000 {
-				e.processed = make(map[string]bool)
+			for k, t := range e.processed {
+				if time.Since(t) > 60*time.Second {
+					delete(e.processed, k)
+				}
 			}
 			e.processedMu.Unlock()
 
