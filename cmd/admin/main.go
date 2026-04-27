@@ -1251,9 +1251,28 @@ func (pm *ProcessManager) handleClientDownload(w http.ResponseWriter, r *http.Re
 	ccw.Write(clientCfgJSON)
 
 	// Add a README
-	isTray := strings.HasPrefix(binFile, "Undertow")
+	isTray := strings.HasPrefix(binFile, "Undertow-GUI-")
+	isWebGUI := strings.HasPrefix(binFile, "Undertow-Web-")
 	var readme string
-	if isTray {
+	if isWebGUI {
+		readme = fmt.Sprintf(`Undertow Client
+==================
+
+Platform: %s
+
+Quick Start:
+1. Double-click %s to launch
+2. Your browser opens a dashboard at http://localhost:...
+3. Click "Connect" to start the tunnel
+4. Configure your browser to use SOCKS5 proxy: 127.0.0.1:1080
+
+Firefox: Settings → General → Network Settings → Manual proxy → SOCKS Host: 127.0.0.1, Port: 1080, SOCKS v5
+Edge/Chrome: Run with flag --proxy-server="socks5://127.0.0.1:1080"
+
+To disconnect: click "Disconnect" in the dashboard
+To quit: close the dashboard tab and press Ctrl+C in the background window (if visible)
+`, label, binFile)
+	} else if isTray {
 		readme = fmt.Sprintf(`Undertow Client
 ==================
 

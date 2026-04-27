@@ -388,7 +388,7 @@ func openBrowser(url string) {
 	case "darwin":
 		exec.Command("open", url).Start()
 	case "windows":
-		exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		exec.Command("cmd", "/c", "start", url).Start()
 	default:
 		exec.Command("xdg-open", url).Start()
 	}

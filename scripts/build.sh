@@ -79,10 +79,11 @@ for platform in "${platforms[@]}"; do
     for gp_platform in "darwin/arm64" "darwin/amd64" "windows/amd64" "windows/arm64"; do
         IFS='/' read -r GP_OS GP_ARCH <<< "$gp_platform"
         GP_SUFFIX=""
-        [[ "$GP_OS" == "windows" ]] && GP_SUFFIX=".exe"
+        GP_LDFLAGS="-s -w -X main.Version=${VERSION}"
+        [[ "$GP_OS" == "windows" ]] && GP_SUFFIX=".exe" && GP_LDFLAGS="$GP_LDFLAGS -H windowsgui"
         GP_NAME="Undertow-Web-${GP_OS}-${GP_ARCH}${GP_SUFFIX}"
         CGO_ENABLED=0 GOOS="$GP_OS" GOARCH="$GP_ARCH" \
-            go build -ldflags="-s -w -X main.Version=${VERSION}" -trimpath -o "$OUT/clients/$GP_NAME" ./cmd/gui
+            go build -ldflags="$GP_LDFLAGS" -trimpath -o "$OUT/clients/$GP_NAME" ./cmd/gui
     done
 
     # Restore outer loop env
