@@ -1434,15 +1434,16 @@ func main() {
 
 	cfg, configPath := loadConfig(configPath)
 
-	// Apply timezone if configured (affects log timestamps + time.Now()
-	// for everything in this process).
-	if cfg.Timezone != "" {
-		if loc, err := time.LoadLocation(cfg.Timezone); err == nil {
-			time.Local = loc
-			log.Printf("Timezone set to %s", cfg.Timezone)
-		} else {
-			log.Printf("Warning: invalid timezone %q: %v", cfg.Timezone, err)
-		}
+	// Apply timezone (defaults to Europe/Berlin if not configured).
+	tz := cfg.Timezone
+	if tz == "" {
+		tz = "Europe/Berlin"
+	}
+	if loc, err := time.LoadLocation(tz); err == nil {
+		time.Local = loc
+		log.Printf("Timezone set to %s", tz)
+	} else {
+		log.Printf("Warning: invalid timezone %q: %v", tz, err)
 	}
 
 	listenAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)

@@ -34,13 +34,15 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	if appCfg.Timezone != "" {
-		if loc, err := time.LoadLocation(appCfg.Timezone); err == nil {
-			time.Local = loc
-			log.Printf("Timezone set to %s", appCfg.Timezone)
-		} else {
-			log.Printf("Warning: invalid timezone %q: %v", appCfg.Timezone, err)
-		}
+	tz := appCfg.Timezone
+	if tz == "" {
+		tz = "Europe/Berlin"
+	}
+	if loc, err := time.LoadLocation(tz); err == nil {
+		time.Local = loc
+		log.Printf("Timezone set to %s", tz)
+	} else {
+		log.Printf("Warning: invalid timezone %q: %v", tz, err)
 	}
 
 	var inner storage.Backend
