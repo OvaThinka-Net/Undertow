@@ -49,18 +49,22 @@ unzip -qo "$TMP/$ZIP" -d "$TMP"
 
 echo "  [3/5] Installing to ${INSTALL_DIR}..."
 if [[ -d "$INSTALL_DIR" ]]; then
-    # Preserve existing configs
-    for cfg in admin_config.json server_config.json credentials.json token.json; do
+    # Preserve existing configs and tokens
+    for cfg in admin_config.json server_config.json credentials.json credentials.json.token; do
         [[ -f "$INSTALL_DIR/$cfg" ]] && cp "$INSTALL_DIR/$cfg" "$TMP/$cfg.bak" 2>/dev/null || true
     done
+    # Preserve logs
+    [[ -d "$INSTALL_DIR/logs" ]] && cp -r "$INSTALL_DIR/logs" "$TMP/logs.bak" 2>/dev/null || true
     rm -rf "$INSTALL_DIR"
 fi
 mv "$TMP/undertow-${VERSION}-linux-${ARCH}" "$INSTALL_DIR"
 
-# Restore configs
-for cfg in admin_config.json server_config.json credentials.json token.json; do
+# Restore configs and tokens
+for cfg in admin_config.json server_config.json credentials.json credentials.json.token; do
     [[ -f "$TMP/$cfg.bak" ]] && mv "$TMP/$cfg.bak" "$INSTALL_DIR/$cfg"
 done
+# Restore logs
+[[ -d "$TMP/logs.bak" ]] && mv "$TMP/logs.bak" "$INSTALL_DIR/logs"
 
 echo "  [4/5] Running installer..."
 bash "$INSTALL_DIR/install.sh"
