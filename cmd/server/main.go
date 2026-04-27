@@ -16,6 +16,8 @@ import (
 	"github.com/OvaThinka-Net/Undertow/internal/transport"
 )
 
+var Version = "dev"
+
 func main() {
 	var configPath, gcPath string
 	flag.StringVar(&configPath, "c", "config.json", "Path to config file")

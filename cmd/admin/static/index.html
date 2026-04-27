@@ -100,6 +100,7 @@ ol li{margin-bottom:6px;font-size:.9em}
 
 <div class="header">
   <h1>⚡ Undertow</h1>
+  <span style="font-size:.75em;color:var(--dim)" id="versionLabel"></span>
   <span class="dot" id="statusDot"></span>
   <span class="status-text" id="statusText">Loading...</span>
   <button class="btn small" onclick="location.href='/logout'" style="margin-left:12px">Logout</button>
@@ -436,13 +437,15 @@ function toast(msg, type='success') {
 }
 
 async function api(path, opts={}) {
+  if (!opts.headers) opts.headers = {};
+  opts.headers['X-Requested-With'] = 'fetch';
   const resp = await fetch(path, opts);
   if (resp.status === 401) { window.location.href = '/login'; return {}; }
   return resp.json();
 }
 async function apiPost(path, body) {
-  const opts = {method:'POST'};
-  if (body) { opts.headers = {'Content-Type':'application/json'}; opts.body = JSON.stringify(body); }
+  const opts = {method:'POST', headers:{'X-Requested-With':'fetch'}};
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   const data = await api(path, opts);
   if (data.error) toast(data.error, 'error');
   else if (data.ok) toast(data.ok);
@@ -517,6 +520,7 @@ async function refreshStatus() {
   document.getElementById('btnStart').disabled = s.running;
   document.getElementById('btnStop').disabled = !s.running;
   document.getElementById('btnRestart').disabled = !s.running;
+  if (s.version) document.getElementById('versionLabel').textContent = s.version;
   setBadge('credsBadge', s.creds_exists, 'Uploaded', 'Missing');
   setBadge('tokenBadge', s.token_exists, 'Authenticated', 'Missing');
 }
@@ -532,7 +536,7 @@ function initDZ(zId) {
 async function uploadFile(f) {
   if(!f)return;
   const fd = new FormData(); fd.append('file', f);
-  const r = await fetch('/api/credentials',{method:'POST',body:fd});
+  const r = await fetch('/api/credentials',{method:'POST',body:fd,headers:{'X-Requested-With':'fetch'}});
   const d = await r.json();
   if(d.error) toast(d.error,'error'); else toast(d.ok||'Uploaded');
   refreshAll();
@@ -645,7 +649,7 @@ async function saveAdminCreds() {
   try {
     const resp = await fetch('/api/change-credentials', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify(body)
     });
     const data = await resp.json();

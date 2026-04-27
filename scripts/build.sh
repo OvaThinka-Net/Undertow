@@ -43,9 +43,9 @@ for platform in "${platforms[@]}"; do
     export CGO_ENABLED=0 GOOS="$OS" GOARCH="$ARCH"
     [[ -n "$VARIANT" ]] && export GOARM="$VARIANT"
 
-    go build -ldflags="-s -w" -trimpath -o "$OUT/client${SUFFIX}" ./cmd/client
-    go build -ldflags="-s -w" -trimpath -o "$OUT/server${SUFFIX}" ./cmd/server
-    go build -ldflags="-s -w" -trimpath -o "$OUT/admin${SUFFIX}" ./cmd/admin
+    go build -ldflags="-s -w -X main.Version=${VERSION}" -trimpath -o "$OUT/client${SUFFIX}" ./cmd/client
+    go build -ldflags="-s -w -X main.Version=${VERSION}" -trimpath -o "$OUT/server${SUFFIX}" ./cmd/server
+    go build -ldflags="-s -w -X main.Version=${VERSION}" -trimpath -o "$OUT/admin${SUFFIX}" ./cmd/admin
 
     unset GOARM
 
@@ -64,7 +64,7 @@ for platform in "${platforms[@]}"; do
             CP_NAME="client-${CP_OS}-${CP_ARCH}"
         fi
         CGO_ENABLED=0 GOOS="$CP_OS" GOARCH="$CP_ARCH" \
-            go build -ldflags="-s -w" -trimpath -o "$OUT/clients/$CP_NAME" ./cmd/client
+            go build -ldflags="-s -w -X main.Version=${VERSION}" -trimpath -o "$OUT/clients/$CP_NAME" ./cmd/client
     done
 
     (cd "$RELEASE_DIR" && zip -qr "${FOLDER}.zip" "$FOLDER")

@@ -22,6 +22,8 @@ import (
 	"github.com/things-go/go-socks5/statute"
 )
 
+var Version = "dev"
+
 func generateSessionID() string {
 	b := make([]byte, 16)
 	rand.Read(b)

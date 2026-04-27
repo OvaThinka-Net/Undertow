@@ -21,7 +21,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -39,6 +39,8 @@ var changeCredsHTML []byte
 
 //go:embed config.default.json
 var defaultConfigJSON []byte
+
+var Version = "dev"
 
 // ---------- Config ----------
 
@@ -124,13 +126,21 @@ type LogBuffer struct {
 	entries []LogEntry
 	subsMu  sync.Mutex
 	subs    map[chan LogEntry]struct{}
+	logFile *os.File
 }
 
-func NewLogBuffer() *LogBuffer {
-	return &LogBuffer{
+func NewLogBuffer(logPath string) *LogBuffer {
+	lb := &LogBuffer{
 		entries: make([]LogEntry, 0, 2000),
 		subs:    make(map[chan LogEntry]struct{}),
 	}
+	if logPath != "" {
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err == nil {
+			lb.logFile = f
+		}
+	}
+	return lb
 }
 
 func (lb *LogBuffer) Add(source, message string) {
@@ -144,6 +154,9 @@ func (lb *LogBuffer) Add(source, message string) {
 		lb.entries = lb.entries[1:]
 	}
 	lb.entries = append(lb.entries, entry)
+	if lb.logFile != nil {
+		fmt.Fprintf(lb.logFile, "%s [%s] %s\n", entry.Time, source, message)
+	}
 	lb.mu.Unlock()
 
 	lb.subsMu.Lock()
@@ -182,6 +195,7 @@ func (lb *LogBuffer) Unsubscribe(ch chan LogEntry) {
 
 type ProcessManager struct {
 	mu           sync.Mutex
+	restartMu    sync.Mutex // serializes restart to prevent races
 	cmd          *exec.Cmd
 	running      bool
 	pid          int
@@ -195,9 +209,11 @@ type ProcessManager struct {
 }
 
 func NewProcessManager(workDir string, cfg AdminConfig) *ProcessManager {
+	logPath := filepath.Join(workDir, "logs", "undertow.log")
+	os.MkdirAll(filepath.Dir(logPath), 0755)
 	return &ProcessManager{
 		workDir:      workDir,
-		logs:         NewLogBuffer(),
+		logs:         NewLogBuffer(logPath),
 		serverBin:    cfg.ServerBin,
 		serverConfig: cfg.ServerConfig,
 		credsFile:    cfg.CredentialsFile,
@@ -308,6 +324,7 @@ type StatusResponse struct {
 	CredsExists  bool   `json:"creds_exists"`
 	TokenExists  bool   `json:"token_exists"`
 	ServerExists bool   `json:"server_exists"`
+	Version      string `json:"version"`
 }
 
 func (pm *ProcessManager) Status() StatusResponse {
@@ -331,6 +348,7 @@ func (pm *ProcessManager) Status() StatusResponse {
 		CredsExists:  exists(pm.credsFile),
 		TokenExists:  exists(pm.credsFile + ".token"),
 		ServerExists: exists(pm.serverBin),
+		Version:      Version,
 	}
 }
 
@@ -374,6 +392,8 @@ func (pm *ProcessManager) handleRestart(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "method not allowed", 405)
 		return
 	}
+	pm.restartMu.Lock()
+	defer pm.restartMu.Unlock()
 	pm.Stop() // ignore error if not running
 	time.Sleep(500 * time.Millisecond)
 	if err := pm.Start(); err != nil {
@@ -407,17 +427,20 @@ func (pm *ProcessManager) handleConfig(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, map[string]string{"error": "failed to read body"})
 			return
 		}
+		// Validate JSON
 		var check json.RawMessage
 		if json.Unmarshal(body, &check) != nil {
 			writeJSON(w, map[string]string{"error": "invalid JSON"})
 			return
 		}
-		// Pretty-print
+		// Pretty-print while preserving structure via json.Decoder with UseNumber
+		dec := json.NewDecoder(bytes.NewReader(body))
+		dec.UseNumber()
 		var pretty map[string]interface{}
-		json.Unmarshal(body, &pretty)
+		dec.Decode(&pretty)
 		formatted, _ := json.MarshalIndent(pretty, "", "  ")
 
-		if err := os.WriteFile(cfgPath, append(formatted, '\n'), 0644); err != nil {
+		if err := atomicWriteFile(cfgPath, append(formatted, '\n'), 0644); err != nil {
 			writeJSON(w, map[string]string{"error": err.Error()})
 			return
 		}
@@ -625,7 +648,7 @@ func (pm *ProcessManager) driveAccessToken() (string, error) {
 	v.Set("client_id", creds.Installed.ClientID)
 	v.Set("client_secret", creds.Installed.ClientSecret)
 
-	resp, err := http.PostForm("https://www.googleapis.com/oauth2/v4/token", v)
+	resp, err := http.PostForm("https://oauth2.googleapis.com/token", v)
 	if err != nil {
 		return "", err
 	}
@@ -664,7 +687,8 @@ func (pm *ProcessManager) handleSetupFolder(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Check if folder already exists
-	q := fmt.Sprintf("name = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false", folderName)
+	safeName := strings.ReplaceAll(folderName, "'", "\\'")
+	q := fmt.Sprintf("name = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false", safeName)
 	u, _ := url.Parse("https://www.googleapis.com/drive/v3/files")
 	qv := u.Query()
 	qv.Set("q", q)
@@ -752,7 +776,7 @@ func (pm *ProcessManager) handleSetupFolder(w http.ResponseWriter, r *http.Reque
 		delete(cfg, "google_folder_name")
 	}
 	formatted, _ := json.MarshalIndent(cfg, "", "  ")
-	os.WriteFile(cfgPath, append(formatted, '\n'), 0644)
+	atomicWriteFile(cfgPath, append(formatted, '\n'), 0644)
 
 	pm.logs.Add("admin", "Server config updated with folder ID")
 	writeJSON(w, map[string]interface{}{"ok": "folder ready", "folder_id": folderID, "folder_name": folderName})
@@ -809,6 +833,9 @@ func (pm *ProcessManager) handleLogsSSE(w http.ResponseWriter, r *http.Request) 
 	ch := pm.logs.Subscribe()
 	defer pm.logs.Unsubscribe(ch)
 
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
+
 	ctx := r.Context()
 	for {
 		select {
@@ -817,6 +844,9 @@ func (pm *ProcessManager) handleLogsSSE(w http.ResponseWriter, r *http.Request) 
 		case entry := <-ch:
 			data, _ := json.Marshal(entry)
 			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		case <-ticker.C:
+			fmt.Fprintf(w, ": keepalive\n\n")
 			flusher.Flush()
 		}
 	}
@@ -827,6 +857,14 @@ func (pm *ProcessManager) handleLogsSSE(w http.ResponseWriter, r *http.Request) 
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // ---------- Session Auth ----------
@@ -877,10 +915,20 @@ func (sm *SessionManager) validateToken(token string) bool {
 	if len(parts) != 2 {
 		return false
 	}
+	// Verify HMAC signature
 	mac := hmac.New(sha256.New, sm.secretKey)
 	mac.Write([]byte(parts[0]))
 	expected := hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(parts[1]), []byte(expected))
+	if !hmac.Equal([]byte(parts[1]), []byte(expected)) {
+		return false
+	}
+	// Enforce token expiry
+	tsNano, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return false
+	}
+	elapsed := time.Since(time.Unix(0, tsNano))
+	return elapsed <= time.Duration(sm.maxAge)*time.Second
 }
 
 func (sm *SessionManager) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -991,7 +1039,7 @@ func (sm *SessionManager) handleChangeCredentials(w http.ResponseWriter, r *http
 	if sm.configPath != "" {
 		data, err := json.MarshalIndent(sm.cfg, "", "  ")
 		if err == nil {
-			os.WriteFile(sm.configPath, data, 0600)
+			atomicWriteFile(sm.configPath, data, 0600)
 		}
 	}
 
@@ -1013,6 +1061,11 @@ func (sm *SessionManager) handleChangeCredsPage(w http.ResponseWriter, r *http.R
 
 func (sm *SessionManager) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Security headers
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+
 		// Allow login page and login API without auth
 		if r.URL.Path == "/login" || r.URL.Path == "/api/login" {
 			next.ServeHTTP(w, r)
@@ -1041,6 +1094,14 @@ func (sm *SessionManager) authMiddleware(next http.Handler) http.Handler {
 					return
 				}
 				http.Redirect(w, r, "/change-credentials", http.StatusFound)
+				return
+			}
+		}
+		// CSRF: require X-Requested-With header on state-changing API calls
+		if r.Method != http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/") {
+			if r.Header.Get("X-Requested-With") == "" {
+				w.WriteHeader(403)
+				writeJSON(w, map[string]string{"error": "missing CSRF header"})
 				return
 			}
 		}
@@ -1091,11 +1152,7 @@ func (pm *ProcessManager) handleClientPlatforms(w http.ResponseWriter, r *http.R
 	suggested := ""
 	switch {
 	case strings.Contains(ua, "macintosh") || strings.Contains(ua, "mac os"):
-		if runtime.GOARCH == "arm64" {
-			suggested = "darwin-arm64"
-		} else {
-			suggested = "darwin-amd64"
-		}
+		suggested = "darwin-arm64" // Apple Silicon is dominant; Intel users can switch manually
 	case strings.Contains(ua, "windows"):
 		suggested = "windows-amd64"
 	case strings.Contains(ua, "linux"):
@@ -1330,10 +1387,29 @@ func main() {
 	log.Printf("╠══════════════════════════════════════╣")
 	log.Printf("║  URL:  http://%-22s║", listenAddr)
 	log.Printf("║  User: %-30s║", cfg.Username)
-	log.Printf("║  Pass: %-30s║", cfg.Password)
+	log.Printf("║  Pass: %-30s║", strings.Repeat("*", len(cfg.Password)))
 	log.Printf("╚══════════════════════════════════════╝")
 
-	srv := &http.Server{Addr: listenAddr, Handler: handler}
+	// Auto-start server if setup is complete
+	if !sm.isDefaultCredentials() {
+		status := pm.Status()
+		if status.ServerExists && status.ConfigExists && status.CredsExists && status.TokenExists {
+			if err := pm.Start(); err != nil {
+				pm.logs.Add("admin", fmt.Sprintf("Auto-start failed: %v", err))
+			} else {
+				pm.logs.Add("admin", "Server auto-started")
+			}
+		}
+	}
+
+	srv := &http.Server{
+		Addr:              listenAddr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
 	go func() {
 		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 			log.Fatalf("HTTP server error: %v", err)
