@@ -130,6 +130,7 @@ WantedBy=multi-user.target
 - **Live Logs**: Real-time server log streaming
 - **Admin Credentials**: Change username/password from the dashboard (saved to config file)
 - **Client Packages**: Download client zips for macOS, Linux, and Windows (arm64 & amd64) — includes shared OAuth token and folder ID (no Google sign-in needed on clients)
+- **12 Platform Variants**: CLI, Web GUI, and System Tray options for macOS/Windows/Linux
 - **Cookie-based Auth**: Password-protected with configurable session duration
 - **Forced Password Change**: First login with default credentials requires immediate password change
 
@@ -139,6 +140,7 @@ WantedBy=multi-user.target
 - **Security Headers**: `X-Frame-Options`, `X-Content-Type-Options`, CSP
 - **Atomic Config Writes**: Config files are written to `.tmp` then renamed to prevent corruption
 - **Token Expiry Validation**: Session tokens are validated for maximum age
+- **Multi-IP Transport**: Client connects via multiple Google IPs with round-robin fallback — resilient against IP-based blocking
 
 ---
 
@@ -185,12 +187,14 @@ go build -o bin/server ./cmd/server
   "refresh_rate_ms": 100,
   "flush_rate_ms": 300,
   "transport": {
-    "TargetIP": "216.239.38.120:443",
+    "TargetIP": "216.239.38.120:443,142.250.110.95:443,74.125.206.95:443,64.233.184.95:443",
     "SNI": "google.com",
     "HostHeader": "www.googleapis.com"
   }
 }
 ```
+
+> **Multi-IP Fallback**: `TargetIP` accepts comma-separated IPs. The client shuffles them on startup and uses round-robin with automatic failover — if one IP is blocked, it tries the next.
 
 **Server Side (`server_config.json`):**
 ```json
@@ -250,16 +254,45 @@ Once you have the `.token` file, you don't need to log in again.
 
 ---
 
-## System Tray App (macOS) / اپلیکیشن سیستم تری
+## GUI Clients / کلاینت‌های گرافیکی
 
-A native macOS menu bar app for clients. Connect/disconnect the tunnel with one click — no terminal required.
+### Web GUI (All Platforms)
+
+A cross-platform GUI client with an embedded web dashboard. No CGO required — cross-compiles from macOS for Windows, Linux, and macOS.
+
+یک کلاینت گرافیکی چند پلتفرمی با داشبورد وب داخلی. بدون نیاز به CGO — از مک برای ویندوز، لینوکس و مک کامپایل می‌شود.
 
 ```bash
-# Build (requires CGO for macOS Cocoa)
+# Build for Windows (no CGO needed)
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H windowsgui" -trimpath -o bin/Undertow-Web-windows-amd64.exe ./cmd/gui
+
+# Build for macOS
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/Undertow-Web-darwin-arm64 ./cmd/gui
+```
+
+**How it works**: Double-click the exe → your browser opens a dashboard → click **Connect**. Features:
+- Real-time log streaming (SSE)
+- Connect/Disconnect controls
+- Config editor with save
+- **Start at Login** toggle (macOS — installs a LaunchAgent)
+- Status polling every 5 seconds
+- Runs headless with `--headless` flag
+
+### System Tray (macOS only) / سیستم تری
+
+A native macOS menu bar app. Requires CGO for Cocoa bindings.
+
+```bash
+# Build (requires CGO)
 go build -o bin/tray ./cmd/tray
 ```
 
-Place `client_config.json` and `credentials.json` in `~/.undertow/`, then run `./bin/tray`. The menu bar icon shows connection status and lets you toggle the tunnel.
+Place `client_config.json` and `credentials.json` in `~/.undertow/`, then run. The menu bar icon shows connection status. Features:
+- Connect/Disconnect from tray menu
+- System SOCKS proxy auto-configuration
+- Embedded web dashboard (same as Web GUI)
+- **Start at Login** toggle (macOS LaunchAgent)
+- Open config folder shortcut
 
 ---
 
@@ -279,20 +312,28 @@ Place `client_config.json` and `credentials.json` in `~/.undertow/`, then run `.
 
 ## Building All Platforms / ساخت برای تمام پلتفرم‌ها
 
+The full release build script (`scripts/build.sh`) handles all platforms automatically:
+
+```bash
+bash scripts/build.sh v1.0.0
+```
+
+Or build individual components:
+
 ```bash
 # Server & Admin (Linux x86_64)
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/server-linux-amd64 ./cmd/server
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/admin-linux-amd64 ./cmd/admin
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/server ./cmd/server
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/admin ./cmd/admin
 
-# Client (all platforms)
+# CLI Client (all platforms, no CGO)
 CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-darwin-arm64 ./cmd/client
-CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-darwin-amd64 ./cmd/client
-CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-linux-amd64 ./cmd/client
-CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-linux-arm64 ./cmd/client
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-windows-amd64.exe ./cmd/client
-CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-windows-arm64.exe ./cmd/client
 
-# Tray (macOS only, requires CGO)
+# Web GUI (all platforms, no CGO — Windows uses -H windowsgui to hide console)
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H windowsgui" -trimpath -o bin/Undertow-Web-windows-amd64.exe ./cmd/gui
+CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/Undertow-Web-darwin-arm64 ./cmd/gui
+
+# System Tray (macOS only, requires CGO for Cocoa)
 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/tray-darwin-arm64 ./cmd/tray
 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/tray-darwin-amd64 ./cmd/tray
 ```
