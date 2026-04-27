@@ -411,11 +411,21 @@ func (pm *ProcessManager) handleConfig(w http.ResponseWriter, r *http.Request) {
 		data, err := os.ReadFile(cfgPath)
 		if os.IsNotExist(err) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"storage_type":"google","refresh_rate_ms":200,"flush_rate_ms":300}`))
+			w.Write([]byte(`{"storage_type":"google","refresh_rate_ms":200,"flush_rate_ms":300,"timezone":"Europe/Berlin"}`))
 			return
 		} else if err != nil {
 			writeJSON(w, map[string]string{"error": err.Error()})
 			return
+		}
+		// Ensure timezone field is visible in the editor (defaults to Europe/Berlin).
+		var cfg map[string]interface{}
+		if json.Unmarshal(data, &cfg) == nil {
+			if _, ok := cfg["timezone"]; !ok {
+				cfg["timezone"] = "Europe/Berlin"
+				if formatted, err := json.MarshalIndent(cfg, "", "  "); err == nil {
+					data = append(formatted, '\n')
+				}
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(data)
@@ -764,6 +774,7 @@ func (pm *ProcessManager) handleSetupFolder(w http.ResponseWriter, r *http.Reque
 		"google_folder_id": folderID,
 		"refresh_rate_ms":  200,
 		"flush_rate_ms":    300,
+		"timezone":         "Europe/Berlin",
 	}
 	// Load existing config to preserve any extra fields
 	if existing, err := os.ReadFile(cfgPath); err == nil {
