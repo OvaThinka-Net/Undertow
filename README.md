@@ -80,7 +80,7 @@ Open `http://your-server-ip:8090` in your browser. The wizard will guide you thr
 
 ### 4. Download Client Packages
 
-Once the server is running, the admin dashboard lets you download ready-to-use **client `.zip` files** for all platforms. Each package includes the binary, config, credentials, and a README.
+Once the server is running, the admin dashboard lets you download ready-to-use **client `.zip` files** for all platforms. Each package includes the binary, config, shared OAuth token, folder ID, and a README — clients just extract and run, no Google sign-in needed.
 
 ### Systemd Service (Optional)
 
@@ -103,8 +103,10 @@ WantedBy=multi-user.target
 - **Setup Wizard**: 6-step guided walkthrough
 - **Process Manager**: Start/stop the tunnel server from the browser
 - **Live Logs**: Real-time server log streaming
-- **Client Packages**: Download client zips for macOS, Linux, and Windows (arm64 & amd64)
+- **Admin Credentials**: Change username/password from the dashboard (saved to config file)
+- **Client Packages**: Download client zips for macOS, Linux, and Windows (arm64 & amd64) — includes shared OAuth token and folder ID (no Google sign-in needed on clients)
 - **Cookie-based Auth**: Password-protected with configurable session duration
+- **Forced Password Change**: First login with default credentials requires immediate password change
 
 ---
 

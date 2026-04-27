@@ -371,12 +371,12 @@ ol li{margin-bottom:6px;font-size:.9em}
       <div class="hint" style="margin-top:12px">
         <strong>What the user gets:</strong><br>
         • <code>client binary</code> — the Undertow client for their OS<br>
-        • <code>credentials.json</code> — OAuth client credentials (same app, user signs in with their own Google account)<br>
-        • <code>client_config.json</code> — pre-configured to connect<br>
+        • <code>credentials.json</code> + <code>credentials.json.token</code> — shared OAuth credentials (no Google sign-in needed)<br>
+        • <code>client_config.json</code> — pre-configured with the shared Drive folder ID<br>
         • <code>README.txt</code> — step-by-step instructions
       </div>
-      <div class="hint warning" style="margin-top:8px">
-        ⚠️ <strong>Remind the client user:</strong> They must be added as an <strong>Editor</strong> on the shared Google Drive folder (Step 5B in the wizard), otherwise the client won't have access.
+      <div class="hint" style="margin-top:8px">
+        ℹ️ Clients use the server's shared Google Drive token and folder — no separate Google sign-in or folder sharing required.
       </div>
     </div>
 
@@ -384,6 +384,29 @@ ol li{margin-bottom:6px;font-size:.9em}
       ⚠️ No client binaries found. Upload client binaries to the <code>clients/</code> folder on the server.<br>
       <span style="font-size:.85em;opacity:.8">Expected files: <code>client-darwin-arm64</code>, <code>client-darwin-amd64</code>, <code>client-linux-amd64</code>, <code>client-windows-amd64.exe</code>, etc.</span>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;margin-bottom:12px">
+      <h2 style="flex:1;margin:0">🔐 Admin Credentials</h2>
+      <span id="credSaveStatus" style="font-size:.8em;color:var(--dim);margin-right:12px"></span>
+      <button class="btn small primary" onclick="saveAdminCreds()">Save</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="adminUsername" autocomplete="username" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 12px;width:100%;font-size:.9em">
+      </div>
+      <div class="field">
+        <label>Current Password</label>
+        <input type="password" id="adminCurrentPw" placeholder="Required" autocomplete="current-password" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 12px;width:100%;font-size:.9em">
+      </div>
+      <div class="field">
+        <label>New Password <span style="font-size:.8em;color:var(--dim)">(optional)</span></label>
+        <input type="password" id="adminNewPw" placeholder="Leave blank to keep" autocomplete="new-password" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 12px;width:100%;font-size:.9em">
+      </div>
+    </div>
+    <div class="hint" style="margin-top:8px">Enter your current password to save changes. Leave "New Password" blank to only change the username.</div>
   </div>
 
   <div class="card">
@@ -480,7 +503,7 @@ function showDashboard() {
   isSetupComplete = true;
   document.getElementById('wizardView').classList.add('hidden');
   document.getElementById('dashboardView').classList.remove('hidden');
-  refreshStatus(); loadConfig(); loadClientPlatforms();
+  refreshStatus(); loadConfig(); loadClientPlatforms(); loadAdminCreds();
 }
 
 // ===== Dashboard =====
@@ -596,6 +619,47 @@ async function saveConfig() {
   const r=document.getElementById('configEditor').value;
   try{JSON.parse(r);}catch(e){toast('Invalid JSON: '+e.message,'error');return;}
   await apiPost('/api/config',JSON.parse(r));
+}
+
+// ===== Admin Credentials =====
+async function loadAdminCreds() {
+  const s = await api('/api/credentials-status');
+  if (s.username) document.getElementById('adminUsername').value = s.username;
+  document.getElementById('adminCurrentPw').value = '';
+  document.getElementById('adminNewPw').value = '';
+  document.getElementById('credSaveStatus').textContent = '';
+}
+async function saveAdminCreds() {
+  const username = document.getElementById('adminUsername').value.trim();
+  const currentPw = document.getElementById('adminCurrentPw').value;
+  const newPw = document.getElementById('adminNewPw').value;
+  if (!currentPw) { toast('Enter your current password', 'error'); return; }
+  if (username.length < 3) { toast('Username must be at least 3 characters', 'error'); return; }
+  const body = { current_password: currentPw, new_username: username };
+  if (newPw) {
+    if (newPw.length < 6) { toast('New password must be at least 6 characters', 'error'); return; }
+    body.new_password = newPw;
+  } else {
+    body.new_password = currentPw;
+  }
+  try {
+    const resp = await fetch('/api/change-credentials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      toast('Credentials saved');
+      document.getElementById('credSaveStatus').textContent = '✓ Saved';
+      document.getElementById('adminCurrentPw').value = '';
+      document.getElementById('adminNewPw').value = '';
+    } else {
+      toast(data.error || 'Failed to save', 'error');
+    }
+  } catch (e) {
+    toast('Request failed: ' + e.message, 'error');
+  }
 }
 
 // ===== Logs =====

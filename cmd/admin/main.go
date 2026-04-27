@@ -957,7 +957,7 @@ func (sm *SessionManager) handleChangeCredentials(w http.ResponseWriter, r *http
 		writeJSON(w, map[string]string{"error": "new password must be at least 6 characters"})
 		return
 	}
-	if req.NewPassword == defaultPassword {
+	if sm.isDefaultCredentials() && req.NewPassword == defaultPassword {
 		w.WriteHeader(400)
 		writeJSON(w, map[string]string{"error": "please choose a different password"})
 		return
@@ -1155,13 +1155,23 @@ func (pm *ProcessManager) handleClientDownload(w http.ResponseWriter, r *http.Re
 	cw, _ := zw.Create("undertow-client/credentials.json")
 	cw.Write(credsData)
 
-	// Add client_config.json (use embedded default, inject folder name if custom)
+	// Add credentials.json.token (so client shares the same Google account as server)
+	tokenPath := credsPath + ".token"
+	if tokenData, err := os.ReadFile(tokenPath); err == nil {
+		tw, _ := zw.Create("undertow-client/credentials.json.token")
+		tw.Write(tokenData)
+	}
+
+	// Add client_config.json (use embedded default, inject folder ID + name from server config)
 	clientCfg := make(map[string]interface{})
 	json.Unmarshal(defaultClientConfigJSON, &clientCfg)
-	// Read server config to check for custom folder name
+	// Read server config to inject folder ID and name so all clients use the same shared folder
 	if srvCfgData, err := os.ReadFile(filepath.Join(pm.workDir, pm.serverConfig)); err == nil {
 		var srvCfg map[string]interface{}
 		if json.Unmarshal(srvCfgData, &srvCfg) == nil {
+			if fid, ok := srvCfg["google_folder_id"].(string); ok && fid != "" {
+				clientCfg["google_folder_id"] = fid
+			}
 			if fn, ok := srvCfg["google_folder_name"].(string); ok && fn != "" {
 				clientCfg["google_folder_name"] = fn
 			}
@@ -1190,8 +1200,7 @@ Quick Start:
 1. Double-click %s to launch
 2. A menu bar icon (grey circle) appears in your system tray
 3. Click it → "Connect"
-4. On first run, your browser opens for Google sign-in — click Allow
-5. The icon turns green — you're connected!
+4. The icon turns green — you're connected!
 
 The app automatically sets your system SOCKS proxy.
 All your internet traffic now goes through the tunnel.
@@ -1209,12 +1218,13 @@ Platform: %s
 
 Quick Start:
 1. Open a terminal in this folder
-2. Run: %s -c client_config.json -gc credentials.json
-3. On first run, a browser window opens — sign in with your Google account and click Allow
-4. Copy the redirect URL and paste it back into the terminal
-5. The SOCKS5 proxy is now running on 127.0.0.1:1080
+2. Run: %s
+3. The SOCKS5 proxy is now running on 127.0.0.1:1080
 
-Configure your browser or apps to use SOCKS5 proxy: 127.0.0.1:1080
+Configure your browser to use SOCKS5 proxy: 127.0.0.1:1080
+
+Firefox: Settings → General → Network Settings → Manual proxy → SOCKS Host: 127.0.0.1, Port: 1080, SOCKS v5
+Edge/Chrome: Run with flag --proxy-server="socks5://127.0.0.1:1080"
 `, label, binFile)
 	} else {
 		readme = fmt.Sprintf(`Undertow Client
@@ -1225,10 +1235,8 @@ Platform: %s
 Quick Start:
 1. Open a terminal in this folder
 2. Make the binary executable: chmod +x %s
-3. Run: ./%s -c client_config.json -gc credentials.json
-4. On first run, a browser window opens — sign in with your Google account and click Allow
-5. Copy the redirect URL and paste it back into the terminal
-6. The SOCKS5 proxy is now running on 127.0.0.1:1080
+3. Run: ./%s
+4. The SOCKS5 proxy is now running on 127.0.0.1:1080
 
 Configure your browser or apps to use SOCKS5 proxy: 127.0.0.1:1080
 `, label, binFile, binFile)

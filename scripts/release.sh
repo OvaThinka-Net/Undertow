@@ -44,6 +44,12 @@ curl -fsSL https://raw.githubusercontent.com/${REPO}/main/setup.sh | sudo bash
 \`\`\`
 Auto-detects architecture, downloads, installs, and starts the service.
 
+### What's New
+- **Admin Credentials Panel**: Change username/password directly from the dashboard
+- **Shared OAuth Token**: Client packages now include the server's OAuth token — no Google sign-in needed on clients
+- **Shared Folder ID**: Client config includes the Drive folder ID — clients connect to the correct shared folder automatically
+- **Forced Password Change**: Default credentials (admin/admin) must be changed on first login
+
 ### Downloads
 Each zip contains: \`admin\`, \`server\`, \`client\` binaries + \`clients/\` directory with all platform client binaries + example configs + install scripts.
 
