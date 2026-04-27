@@ -364,7 +364,7 @@ func (b *GoogleBackend) Download(ctx context.Context, filename string) (io.ReadC
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.googleapis.com/drive/v3/files/"+fileID+"?alt=media", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.googleapis.com/drive/v3/files/"+url.PathEscape(fileID)+"?alt=media", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +398,7 @@ func (b *GoogleBackend) Delete(ctx context.Context, filename string) error {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "DELETE", "https://www.googleapis.com/drive/v3/files/"+fileID, nil)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", "https://www.googleapis.com/drive/v3/files/"+url.PathEscape(fileID), nil)
 	if err != nil {
 		return err
 	}

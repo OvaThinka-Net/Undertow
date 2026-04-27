@@ -110,9 +110,11 @@ func main() {
 	cancel()
 }
 
-// isPrivateIP returns true if the IP is in a private, loopback, or reserved range.
-func isPrivateIP(ip net.IP) bool {
-	privateRanges := []string{
+// privateNets contains pre-parsed private/reserved CIDR ranges for SSRF protection.
+var privateNets []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
 		"10.0.0.0/8",
 		"172.16.0.0/12",
 		"192.168.0.0/16",
@@ -121,9 +123,15 @@ func isPrivateIP(ip net.IP) bool {
 		"::1/128",
 		"fc00::/7",
 		"fe80::/10",
-	}
-	for _, cidr := range privateRanges {
+	} {
 		_, network, _ := net.ParseCIDR(cidr)
+		privateNets = append(privateNets, network)
+	}
+}
+
+// isPrivateIP returns true if the IP is in a private, loopback, or reserved range.
+func isPrivateIP(ip net.IP) bool {
+	for _, network := range privateNets {
 		if network.Contains(ip) {
 			return true
 		}
