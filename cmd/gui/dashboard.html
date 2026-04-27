@@ -154,6 +154,13 @@
                 <button id="btnConnect" class="btn-connect" onclick="doConnect()">Connect</button>
                 <button id="btnDisconnect" class="btn-disconnect" onclick="doDisconnect()" disabled>Disconnect</button>
             </div>
+            <div id="autostartRow" style="display:none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #30363d;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px;">
+                    <input type="checkbox" id="chkAutoStart" onchange="toggleAutoStart(this.checked)" style="width: 16px; height: 16px; accent-color: #58a6ff; cursor: pointer;">
+                    Start at login
+                    <span style="color: #8b949e; font-size: 12px;">(macOS only)</span>
+                </label>
+            </div>
         </div>
     </div>
 
@@ -311,7 +318,34 @@ async function pollStatus() {
         const data = await res.json();
         updateUI(data.connected);
         setupWarn.className = 'setup-warn' + ((!data.has_creds || !data.has_config) ? ' show' : '');
+
+        // Show autostart toggle on macOS
+        const row = document.getElementById('autostartRow');
+        if (data.os === 'darwin') {
+            row.style.display = 'block';
+            document.getElementById('chkAutoStart').checked = !!data.autostart;
+        }
     } catch (_) {}
+}
+
+async function toggleAutoStart(enabled) {
+    try {
+        const res = await fetch('/api/autostart', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+        });
+        const data = await res.json();
+        if (data.error) {
+            toast('Auto-start: ' + data.error, 'error');
+            document.getElementById('chkAutoStart').checked = !enabled;
+        } else {
+            toast(enabled ? 'Will start at login' : 'Auto-start disabled', 'success');
+        }
+    } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+        document.getElementById('chkAutoStart').checked = !enabled;
+    }
 }
 
 // Init

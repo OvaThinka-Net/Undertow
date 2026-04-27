@@ -260,7 +260,42 @@ func startDashboard(tunnel *Tunnel, logs *LogBuffer, dataDir string) int {
 			"has_token":  fileExists(filepath.Join(dataDir, "credentials.json.token")),
 			"has_config": fileExists(filepath.Join(dataDir, "client_config.json")),
 			"version":    Version,
+			"autostart":  isAutoStartEnabled(),
+			"os":         runtime.GOOS,
 		})
+	})
+
+	mux.HandleFunc("/api/autostart", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"enabled":   isAutoStartEnabled(),
+				"supported": runtime.GOOS == "darwin",
+			})
+		case http.MethodPost:
+			var body struct {
+				Enabled bool `json:"enabled"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				json.NewEncoder(w).Encode(map[string]string{"error": "invalid request"})
+				return
+			}
+			var err error
+			if body.Enabled {
+				err = enableAutoStart()
+			} else {
+				err = disableAutoStart()
+			}
+			if err != nil {
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			log.Printf("Auto-start %s", map[bool]string{true: "enabled", false: "disabled"}[body.Enabled])
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "enabled": body.Enabled})
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
 	})
 
 	mux.HandleFunc("/api/connect", func(w http.ResponseWriter, r *http.Request) {

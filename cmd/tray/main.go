@@ -165,6 +165,7 @@ func onReady() {
 
 	systray.AddSeparator()
 	mProxy := systray.AddMenuItemCheckbox("Set System Proxy", "Auto-configure SOCKS proxy", true)
+	mAutoStart := systray.AddMenuItemCheckbox("Start at Login", "Launch Undertow on macOS login", isAutoStartEnabled())
 
 	systray.AddSeparator()
 	mDashboard := systray.AddMenuItem("Dashboard", "Open web dashboard")
@@ -214,6 +215,23 @@ func onReady() {
 
 			case <-mDashboard.ClickedCh:
 				app.dash.Open()
+
+			case <-mAutoStart.ClickedCh:
+				if mAutoStart.Checked() {
+					if err := disableAutoStart(); err != nil {
+						log.Printf("Failed to disable auto-start: %v", err)
+					} else {
+						mAutoStart.Uncheck()
+						log.Println("Auto-start disabled")
+					}
+				} else {
+					if err := enableAutoStart(); err != nil {
+						log.Printf("Failed to enable auto-start: %v", err)
+					} else {
+						mAutoStart.Check()
+						log.Println("Auto-start enabled")
+					}
+				}
 
 			case <-mOpenFolder.ClickedCh:
 				openFolder(appDataDir)
