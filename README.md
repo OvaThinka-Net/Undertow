@@ -85,7 +85,8 @@ Create `admin_config.json` on the server (see `admin_config.json.example`):
   "session_hours": 168,
   "server_bin": "server",
   "server_config": "server_config.json",
-  "credentials_file": "credentials.json"
+  "credentials_file": "credentials.json",
+  "timezone": "Europe/Berlin"
 }
 ```
 
@@ -130,7 +131,7 @@ WantedBy=multi-user.target
 - **Live Logs**: Real-time server log streaming
 - **Admin Credentials**: Change username/password from the dashboard (saved to config file)
 - **Client Packages**: Download client zips for macOS, Linux, and Windows (arm64 & amd64) — includes shared OAuth token and folder ID (no Google sign-in needed on clients)
-- **12 Platform Variants**: CLI, Web GUI, and System Tray options for macOS/Windows/Linux
+- **Multiple Platform Variants**: CLI and System Tray (GUI) options for macOS/Windows/Linux
 - **Cookie-based Auth**: Password-protected with configurable session duration
 - **Forced Password Change**: First login with default credentials requires immediate password change
 
@@ -202,7 +203,8 @@ go build -o bin/server ./cmd/server
   "storage_type": "google",
   "google_folder_id": "YOUR_FOLDER_ID",
   "refresh_rate_ms": 100,
-  "flush_rate_ms": 300
+  "flush_rate_ms": 150,
+  "timezone": "Europe/Berlin"
 }
 ```
 
@@ -254,44 +256,28 @@ Once you have the `.token` file, you don't need to log in again.
 
 ---
 
-## GUI Clients / کلاینت‌های گرافیکی
+## GUI Client — System Tray / کلاینت گرافیکی — سیستم تری
 
-### Web GUI (All Platforms)
+A system tray app for **macOS and Windows** with an embedded web dashboard. Requires CGO for native system tray bindings.
 
-A cross-platform GUI client with an embedded web dashboard. No CGO required — cross-compiles from macOS for Windows, Linux, and macOS.
-
-یک کلاینت گرافیکی چند پلتفرمی با داشبورد وب داخلی. بدون نیاز به CGO — از مک برای ویندوز، لینوکس و مک کامپایل می‌شود.
+یک برنامه سیستم تری برای **مک و ویندوز** با داشبورد وب داخلی. برای ساخت نیاز به CGO دارد.
 
 ```bash
-# Build for Windows (no CGO needed)
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H windowsgui" -trimpath -o bin/Undertow-Web-windows-amd64.exe ./cmd/gui
+# Build for macOS (requires CGO)
+GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/Undertow-GUI-darwin-arm64 ./cmd/tray
+GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/Undertow-GUI-darwin-amd64 ./cmd/tray
 
-# Build for macOS
-CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/Undertow-Web-darwin-arm64 ./cmd/gui
+# Build for Windows (requires CGO + mingw-w64 cross-compiler from macOS)
+x86_64-w64-mingw32-gcc  # CC for amd64
+CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H windowsgui" -trimpath -o bin/Undertow-GUI-windows-amd64.exe ./cmd/tray
 ```
 
-**How it works**: Double-click the exe → your browser opens a dashboard → click **Connect**. Features:
-- Real-time log streaming (SSE)
-- Connect/Disconnect controls
-- Config editor with save
-- **Start at Login** toggle (macOS — installs a LaunchAgent)
-- Status polling every 5 seconds
-- Runs headless with `--headless` flag
-
-### System Tray (macOS only) / سیستم تری
-
-A native macOS menu bar app. Requires CGO for Cocoa bindings.
-
-```bash
-# Build (requires CGO)
-go build -o bin/tray ./cmd/tray
-```
-
-Place `client_config.json` and `credentials.json` in `~/.undertow/`, then run. The menu bar icon shows connection status. Features:
+Place `client_config.json` and `credentials.json` in `~/.undertow/` (macOS) or `%LOCALAPPDATA%\Undertow\` (Windows), then run. Features:
 - Connect/Disconnect from tray menu
-- System SOCKS proxy auto-configuration
-- Embedded web dashboard (same as Web GUI)
-- **Start at Login** toggle (macOS LaunchAgent)
+- Embedded web dashboard with real-time logs
+- System SOCKS proxy auto-configuration (macOS)
+- **Start at Login** toggle (macOS LaunchAgent / Windows Registry)
+- Config editor with save
 - Open config folder shortcut
 
 ---
@@ -329,11 +315,10 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin
 CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/client-darwin-arm64 ./cmd/client
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/client-windows-amd64.exe ./cmd/client
 
-# Web GUI (all platforms, no CGO — Windows uses -H windowsgui to hide console)
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H windowsgui" -trimpath -o bin/Undertow-Web-windows-amd64.exe ./cmd/gui
-CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/Undertow-Web-darwin-arm64 ./cmd/gui
-
-# System Tray (macOS only, requires CGO for Cocoa)
-GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/tray-darwin-arm64 ./cmd/tray
-GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/tray-darwin-amd64 ./cmd/tray
+# System Tray GUI (macOS + Windows, requires CGO)
+GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o bin/Undertow-GUI-darwin-arm64 ./cmd/tray
+GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o bin/Undertow-GUI-darwin-amd64 ./cmd/tray
+# Windows (requires mingw-w64 cross-compiler)
+CC=x86_64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H windowsgui" -trimpath -o bin/Undertow-GUI-windows-amd64.exe ./cmd/tray
+CC=aarch64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=windows GOARCH=arm64 go build -ldflags="-s -w -H windowsgui" -trimpath -o bin/Undertow-GUI-windows-arm64.exe ./cmd/tray
 ```
