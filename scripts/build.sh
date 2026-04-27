@@ -34,7 +34,7 @@ for platform in "${platforms[@]}"; do
     LABEL="${OS}-${ARCH}"
     [[ -n "$VARIANT" ]] && LABEL="${LABEL}v${VARIANT}"
 
-    FOLDER="undertow-${VERSION}-${LABEL}"
+    FOLDER="undertow-${LABEL}"
     OUT="$RELEASE_DIR/$FOLDER"
     mkdir -p "$OUT"
 

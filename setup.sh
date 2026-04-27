@@ -27,7 +27,7 @@ case "$ARCH" in
     *)       echo "  ERROR: Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-ZIP="undertow-${VERSION}-linux-${ARCH}.zip"
+ZIP="undertow-linux-${ARCH}.zip"
 URL="${REPO}/${VERSION}/${ZIP}"
 TMP=$(mktemp -d)
 
@@ -57,7 +57,7 @@ if [[ -d "$INSTALL_DIR" ]]; then
     [[ -d "$INSTALL_DIR/logs" ]] && cp -r "$INSTALL_DIR/logs" "$TMP/logs.bak" 2>/dev/null || true
     rm -rf "$INSTALL_DIR"
 fi
-mv "$TMP/undertow-${VERSION}-linux-${ARCH}" "$INSTALL_DIR"
+mv "$TMP/undertow-linux-${ARCH}" "$INSTALL_DIR"
 
 # Restore configs and tokens
 for cfg in admin_config.json server_config.json credentials.json credentials.json.token; do
