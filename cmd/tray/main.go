@@ -224,6 +224,19 @@ func onReady() {
 	if !fileExists(filepath.Join(appDataDir, "credentials.json")) {
 		app.mStatus.SetTitle("⚠ Setup: credentials.json missing")
 		app.mConnect.Disable()
+	} else {
+		// Auto-connect on startup
+		go func() {
+			log.Println("Auto-connecting...")
+			app.mConnect.Disable()
+			app.mStatus.SetTitle("Status: Connecting...")
+			systray.SetTooltip("Undertow — Connecting...")
+			if err := app.doConnect(); err != nil {
+				log.Printf("Auto-connect failed: %v", err)
+				app.mStatus.SetTitle(fmt.Sprintf("⚠ Error: %s", err))
+				app.mConnect.Enable()
+			}
+		}()
 	}
 
 	go func() {
