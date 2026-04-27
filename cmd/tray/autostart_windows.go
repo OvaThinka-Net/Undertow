@@ -5,20 +5,22 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
+
+	"golang.org/x/sys/windows/registry"
 )
 
-const regKey = `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
 const regValue = "Undertow"
 
 func isAutoStartEnabled() bool {
-	out, err := exec.Command("reg", "query", regKey, "/v", regValue).Output()
+	k, err := registry.OpenKey(registry.CURRENT_USER,
+		`Software\Microsoft\Windows\CurrentVersion\Run`, registry.QUERY_VALUE)
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(out), regValue)
+	defer k.Close()
+	_, _, err = k.GetStringValue(regValue)
+	return err == nil
 }
 
 func enableAutoStart() error {
@@ -31,19 +33,25 @@ func enableAutoStart() error {
 		return fmt.Errorf("resolve symlinks: %w", err)
 	}
 
-	return exec.Command("reg", "add", regKey,
-		"/v", regValue, "/t", "REG_SZ", "/d", `"`+exePath+`"`, "/f").Run()
+	k, err := registry.OpenKey(registry.CURRENT_USER,
+		`Software\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+	return k.SetStringValue(regValue, `"`+exePath+`"`)
 }
 
 func disableAutoStart() error {
-	err := exec.Command("reg", "delete", regKey, "/v", regValue, "/f").Run()
+	k, err := registry.OpenKey(registry.CURRENT_USER,
+		`Software\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE)
 	if err != nil {
-		// If the key doesn't exist, that's fine
-		out, _ := exec.Command("reg", "query", regKey, "/v", regValue).CombinedOutput()
-		if strings.Contains(string(out), "ERROR") {
-			return nil
-		}
-		return err
+		return nil // key doesn't exist, nothing to delete
 	}
-	return nil
+	defer k.Close()
+	err = k.DeleteValue(regValue)
+	if err == registry.ErrNotExist {
+		return nil
+	}
+	return err
 }
