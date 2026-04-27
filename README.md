@@ -8,6 +8,21 @@
 
 ---
 
+## Screenshots
+
+| Login | Dashboard | Setup Wizard |
+|:---:|:---:|:---:|
+| ![Login](assets/screenshots/01-login.png) | ![Dashboard](assets/screenshots/02-dashboard.png) | ![Setup Wizard](assets/screenshots/03-setup-wizard.png) |
+
+<details>
+<summary>Full Dashboard (click to expand)</summary>
+
+![Full Dashboard](assets/screenshots/02-dashboard-full.png)
+
+</details>
+
+---
+
 ## ⚠️ Disclaimer / سلب مسئولیت
 
 **English**: This project is intended for personal usage and research purposes only. Please do not use it for illegal purposes, and do not use it in a production environment. The authors are not responsible for any misuse of this tool.
