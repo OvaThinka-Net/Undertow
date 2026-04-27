@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -177,7 +178,7 @@ func onReady() {
 	app = &appState{
 		tunnel:   tunnel,
 		logs:     logs,
-		useProxy: true,
+		useProxy: runtime.GOOS != "windows",
 	}
 
 	// Start embedded dashboard
@@ -202,7 +203,10 @@ func onReady() {
 	app.mDisconnect.Disable()
 
 	systray.AddSeparator()
-	mProxy := systray.AddMenuItemCheckbox("Set System Proxy", "Auto-configure SOCKS proxy", true)
+	var mProxy *systray.MenuItem
+	if runtime.GOOS != "windows" {
+		mProxy = systray.AddMenuItemCheckbox("Set System Proxy", "Auto-configure SOCKS proxy", true)
+	}
 	mAutoStart := systray.AddMenuItemCheckbox("Start at Login", "Launch Undertow at login", isAutoStartEnabled())
 
 	systray.AddSeparator()
@@ -235,6 +239,10 @@ func onReady() {
 	}
 
 	go func() {
+		var proxyCh chan struct{}
+		if mProxy != nil {
+			proxyCh = mProxy.ClickedCh
+		}
 		for {
 			select {
 			case <-app.mConnect.ClickedCh:
@@ -252,7 +260,7 @@ func onReady() {
 				app.mStatus.SetTitle("Status: Disconnecting...")
 				app.doDisconnect()
 
-			case <-mProxy.ClickedCh:
+			case <-proxyCh:
 				app.mu.Lock()
 				if mProxy.Checked() {
 					mProxy.Uncheck()

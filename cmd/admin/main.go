@@ -1307,23 +1307,26 @@ Config folder: ~/.undertow/
 
 Platform: %s
 
-IMPORTANT FIRST STEP — Unblock the files:
-  Double-click "Unblock.cmd" once.
-  Without this, Windows blocks the app from auto-starting at login.
+QUICK INSTALL — just double-click "Install.cmd"
+  This will:
+    • Copy Undertow to %%LOCALAPPDATA%%\Undertow
+    • Unblock all files (clear Mark-of-the-Web)
+    • Launch the app, which auto-registers for start-at-login
+    • Auto-connect the tunnel
 
-Quick Start:
-1. Double-click %s to launch
-2. A tray icon (grey circle) appears in the Windows notification area
-   (it may be hidden — click the ^ arrow to show all icons)
-3. The tunnel auto-connects on startup — icon turns green when ready
-4. To disconnect: click the tray icon → "Disconnect"
-5. To quit: click the tray icon → "Quit"
+After install, you can delete this download folder.
+The tray icon (grey/green circle) appears in the notification area.
+If hidden, click the ^ arrow in the taskbar to show it.
 
-Auto-start at login is enabled automatically on first run.
-Dashboard: click the tray icon → "Dashboard" to open the web UI
-Config folder: %%USERPROFILE%%\.undertow\
-Logs: %%USERPROFILE%%\.undertow\startup.log
-`, label, binFile)
+To disconnect: tray icon → "Disconnect"
+To quit:       tray icon → "Quit"
+To uninstall:  delete %%LOCALAPPDATA%%\Undertow and remove the
+               "Undertow" entry from HKCU\...\Run
+
+Dashboard:    tray icon → "Dashboard"
+Config:       %%USERPROFILE%%\.undertow\
+Logs:         %%USERPROFILE%%\.undertow\startup.log
+`, label)
 	} else if strings.Contains(platform, "windows") {
 		readme = fmt.Sprintf(`Undertow Client
 ==================
@@ -1376,11 +1379,33 @@ read
 		lw.Write([]byte(launcherScript))
 	}
 
-	// Add Unblock.cmd for Windows so users can clear Mark-of-the-Web in one click
-	if strings.Contains(platform, "windows") {
+	// Add Install.cmd for Windows: unblocks files, installs to a stable
+	// location, registers auto-start, and launches the tray app.
+	if strings.Contains(platform, "windows") && isTray {
+		installScript := "@echo off\r\n" +
+			"setlocal\r\n" +
+			"set \"SRC=%~dp0\"\r\n" +
+			"set \"DEST=%LOCALAPPDATA%\\Undertow\"\r\n" +
+			"echo Installing Undertow to %DEST% ...\r\n" +
+			"if not exist \"%DEST%\" mkdir \"%DEST%\"\r\n" +
+			"xcopy /Y /E /Q \"%SRC%*\" \"%DEST%\\\" >nul\r\n" +
+			"echo Unblocking files...\r\n" +
+			"powershell -NoProfile -Command \"Get-ChildItem -Path '%DEST%' -Recurse | Unblock-File\"\r\n" +
+			"echo Starting Undertow (it will register itself for auto-start)...\r\n" +
+			"start \"\" \"%DEST%\\" + binFile + "\"\r\n" +
+			"echo.\r\n" +
+			"echo Done. Undertow is now installed at:\r\n" +
+			"echo   %DEST%\r\n" +
+			"echo It will auto-start on every login.\r\n" +
+			"echo Look for the tray icon (click ^ in taskbar if hidden).\r\n" +
+			"pause\r\n"
+		ih := &zip.FileHeader{Name: "undertow-client/Install.cmd", Method: zip.Deflate}
+		iw, _ := zw.CreateHeader(ih)
+		iw.Write([]byte(installScript))
+	} else if strings.Contains(platform, "windows") {
+		// Non-tray Windows builds (CLI client): keep simple Unblock.cmd
 		unblockScript := "@echo off\r\n" +
 			"powershell -NoProfile -Command \"Get-ChildItem -Path '%~dp0' -Recurse | Unblock-File\"\r\n" +
-			"echo.\r\n" +
 			"echo Files unblocked. You can now run Undertow.\r\n" +
 			"pause\r\n"
 		uh := &zip.FileHeader{Name: "undertow-client/Unblock.cmd", Method: zip.Deflate}
