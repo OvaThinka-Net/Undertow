@@ -235,7 +235,10 @@ func (b *GoogleBackend) Upload(ctx context.Context, filename string, data io.Rea
 		// Part 1: Metadata
 		h := make(textproto.MIMEHeader)
 		h.Set("Content-Type", "application/json; charset=UTF-8")
-		part1, _ := metaWriter.CreatePart(h)
+		part1, err := metaWriter.CreatePart(h)
+		if err != nil {
+			return
+		}
 		meta := map[string]interface{}{
 			"name": filename,
 		}
@@ -247,7 +250,10 @@ func (b *GoogleBackend) Upload(ctx context.Context, filename string, data io.Rea
 		// Part 2: Content
 		h = make(textproto.MIMEHeader)
 		h.Set("Content-Type", "application/octet-stream")
-		part2, _ := metaWriter.CreatePart(h)
+		part2, err := metaWriter.CreatePart(h)
+		if err != nil {
+			return
+		}
 		io.Copy(part2, data)
 	}()
 
