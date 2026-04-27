@@ -88,19 +88,25 @@ fi
 # ---------- release notes ----------
 NOTES_FILE="$(mktemp)"
 trap 'rm -f "$NOTES_FILE"' EXIT
-{
-    printf "## Undertow %s\n\n" "$VERSION"
-    printf "Cross-platform SOCKS5 tunnel — release artifacts for all supported platforms.\n\n"
-    printf "### Downloads\n\n"
-    printf "Pick the zip matching your OS and CPU. Each archive contains the\n"
-    printf "\`server\`, \`admin\`, and \`client\` binaries plus example configs and\n"
-    printf "an install script. The \`clients/\` subfolder contains client-only\n"
-    printf "binaries (CLI \`Undertow-*\`, tray \`Undertow-GUI-*\`) used by the\n"
-    printf "admin panel for distribution.\n\n"
-    printf "### Checksums\n\n\`\`\`\n"
-    cat "$RELEASE_DIR/SHA256SUMS"
-    printf "\`\`\`\n"
-} > "$NOTES_FILE"
+
+if [[ -f "$REPO_ROOT/RELEASE.md" ]]; then
+    ok "Using RELEASE.md for release notes"
+    cat "$REPO_ROOT/RELEASE.md" > "$NOTES_FILE"
+    {
+        printf "\n\n---\n\n### Checksums\n\n\`\`\`\n"
+        cat "$RELEASE_DIR/SHA256SUMS"
+        printf "\`\`\`\n"
+    } >> "$NOTES_FILE"
+else
+    warn "No RELEASE.md found — using minimal auto-generated notes"
+    {
+        printf "## Undertow %s\n\n" "$VERSION"
+        printf "Cross-platform SOCKS5 tunnel — release artifacts for all supported platforms.\n\n"
+        printf "### Checksums\n\n\`\`\`\n"
+        cat "$RELEASE_DIR/SHA256SUMS"
+        printf "\`\`\`\n"
+    } > "$NOTES_FILE"
+fi
 
 # ---------- publish ----------
 say "Publishing GitHub release"
