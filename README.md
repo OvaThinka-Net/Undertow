@@ -133,6 +133,13 @@ WantedBy=multi-user.target
 - **Cookie-based Auth**: Password-protected with configurable session duration
 - **Forced Password Change**: First login with default credentials requires immediate password change
 
+### Security
+- **SSRF Protection**: The server blocks all connections to private/reserved IP ranges (RFC 1918, loopback, link-local). Attempts to reach LAN targets through the tunnel are rejected and redirected to a teapot.
+- **CSRF Protection**: POST API calls require `X-Requested-With` header
+- **Security Headers**: `X-Frame-Options`, `X-Content-Type-Options`, CSP
+- **Atomic Config Writes**: Config files are written to `.tmp` then renamed to prevent corruption
+- **Token Expiry Validation**: Session tokens are validated for maximum age
+
 ---
 
 ## Manual Setup (CLI) / راه‌اندازی دستی
