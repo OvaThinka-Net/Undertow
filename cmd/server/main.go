@@ -201,5 +201,9 @@ func handleServerConn(sessionID, targetAddr string, session *transport.Session, 
 		}
 	}()
 
+	// Wait for either goroutine to finish, then clean up the other.
+	// Close the TCP conn to unblock the reader, close session to unblock the RxChan reader.
 	<-errCh
+	conn.Close()
+	session.CloseRx()
 }

@@ -395,7 +395,11 @@ func (e *Engine) pollLoop(ctx context.Context) {
 
 			// Adaptive Polling: Because we just received data, the connection is active.
 			// Instead of jumping back to the select, immediately poll again after a tiny 50ms break to drain queues.
-			time.Sleep(50 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(50 * time.Millisecond):
+			}
 			goto pollAgain
 		}
 	}

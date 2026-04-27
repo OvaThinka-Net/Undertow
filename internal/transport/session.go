@@ -78,42 +78,60 @@ func (s *Session) closeRxChan() {
 	})
 }
 
+// CloseRx closes the receive channel from the outside (e.g., when the TCP connection drops).
+func (s *Session) CloseRx() {
+	s.closeRxChan()
+}
+
 func (s *Session) ProcessRx(env *Envelope) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.lastActivity = time.Now()
 
 	if s.rxClosed {
-		return // Ignore packets if the channel is already safely closed
+		s.mu.Unlock()
+		return
 	}
+
+	var toDeliver [][]byte
+	var shouldClose bool
 
 	if env.Seq == s.rxSeq {
 		if len(env.Payload) > 0 {
-			s.RxChan <- env.Payload
+			toDeliver = append(toDeliver, env.Payload)
 		}
 		s.rxSeq++
 		if env.Close {
-			s.closeRxChan()
-			return
+			shouldClose = true
 		}
 
 		// process any queued future packets
-		for {
-			if nextEnv, ok := s.rxQueue[s.rxSeq]; ok {
-				if len(nextEnv.Payload) > 0 {
-					s.RxChan <- nextEnv.Payload
+		if !shouldClose {
+			for {
+				if nextEnv, ok := s.rxQueue[s.rxSeq]; ok {
+					if len(nextEnv.Payload) > 0 {
+						toDeliver = append(toDeliver, nextEnv.Payload)
+					}
+					delete(s.rxQueue, s.rxSeq)
+					s.rxSeq++
+					if nextEnv.Close {
+						shouldClose = true
+						break
+					}
+				} else {
+					break
 				}
-				delete(s.rxQueue, s.rxSeq)
-				s.rxSeq++
-				if nextEnv.Close {
-					s.closeRxChan()
-					return
-				}
-			} else {
-				break
 			}
 		}
 	} else if env.Seq > s.rxSeq {
 		s.rxQueue[env.Seq] = env
+	}
+	s.mu.Unlock()
+
+	// Deliver outside the lock — channel sends can block without causing deadlock
+	for _, p := range toDeliver {
+		s.RxChan <- p
+	}
+	if shouldClose {
+		s.closeRxChan()
 	}
 }
