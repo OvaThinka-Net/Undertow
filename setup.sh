@@ -3,7 +3,7 @@
 # Usage: curl -fsSL https://raw.githubusercontent.com/OvaThinka-Net/Undertow/main/setup.sh | sudo bash
 set -euo pipefail
 
-VERSION="v1.0.0"
+VERSION="v1.0.1"
 INSTALL_DIR="/opt/undertow"
 REPO="https://github.com/OvaThinka-Net/Undertow/releases/download"
 
