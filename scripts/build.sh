@@ -88,15 +88,6 @@ for platform in "${platforms[@]}"; do
     done
     unset CC
 
-    # Build web GUI (no CGO) — macOS only (Windows users use the tray app)
-    for gp_platform in "darwin/arm64" "darwin/amd64"; do
-        IFS='/' read -r GP_OS GP_ARCH <<< "$gp_platform"
-        GP_LDFLAGS="-s -w -X main.Version=${VERSION}"
-        GP_NAME="Undertow-Web-${GP_OS}-${GP_ARCH}"
-        CGO_ENABLED=0 GOOS="$GP_OS" GOARCH="$GP_ARCH" \
-            go build -ldflags="$GP_LDFLAGS" -trimpath -o "$OUT/clients/$GP_NAME" ./cmd/gui
-    done
-
     # Restore outer loop env
     export CGO_ENABLED=0 GOOS="$OS" GOARCH="$ARCH"
 
