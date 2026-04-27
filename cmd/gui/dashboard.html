@@ -264,17 +264,22 @@ function addLog(entry) {
     logsEl.scrollTop = logsEl.scrollHeight;
 }
 
-let evtSource;
-function startLogStream() {
-    if (evtSource) evtSource.close();
-    evtSource = new EventSource('/api/logs');
-    evtSource.onmessage = function(e) {
-        try { addLog(JSON.parse(e.data)); } catch (_) {}
-    };
-    evtSource.onerror = function() {
-        evtSource.close();
-        setTimeout(startLogStream, 3000);
-    };
+let logCount = 0;
+async function pollLogs() {
+    try {
+        const res = await fetch('/api/logs');
+        const entries = await res.json();
+        if (!Array.isArray(entries)) return;
+        // If buffer wrapped (entries got trimmed), reset
+        if (entries.length < logCount) {
+            logsEl.innerHTML = '';
+            logCount = 0;
+        }
+        for (let i = logCount; i < entries.length; i++) {
+            addLog(entries[i]);
+        }
+        logCount = entries.length;
+    } catch (_) {}
 }
 
 async function loadConfig() {
@@ -350,7 +355,8 @@ async function toggleAutoStart(enabled) {
 
 // Init
 loadConfig();
-startLogStream();
+pollLogs();
+setInterval(pollLogs, 1000);
 pollStatus();
 setInterval(pollStatus, 5000);
 </script>
