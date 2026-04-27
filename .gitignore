@@ -21,5 +21,6 @@ release/
 *.log
 *.token
 CLAUDE.md
-AUDIT.mdgui
+AUDIT.md
+gui
 tray
