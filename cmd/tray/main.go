@@ -19,6 +19,7 @@ import (
 var (
 	appDataDir string
 	app        *appState
+	startupLog *os.File // kept open for the entire lifetime
 )
 
 type appState struct {
@@ -91,9 +92,10 @@ func main() {
 
 	// Log to a file so we can diagnose startup issues (especially on Windows
 	// where there is no console).
-	if lf, err := os.OpenFile(filepath.Join(appDataDir, "startup.log"),
-		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644); err == nil {
-		log.SetOutput(lf)
+	startupLog, _ = os.OpenFile(filepath.Join(appDataDir, "startup.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if startupLog != nil {
+		log.SetOutput(startupLog)
 		log.SetFlags(log.Ldate | log.Ltime)
 		log.Printf("Undertow starting, exe=%s", os.Args[0])
 	}
@@ -120,7 +122,9 @@ func main() {
 	// Keep registry path in sync if the exe was moved
 	ensureAutoStartPath()
 
+	log.Println("Calling systray.Run...")
 	systray.Run(onReady, onExit)
+	log.Println("systray.Run returned")
 }
 
 // firstRunSetup copies credentials.json, token, and client_config.json from
@@ -169,8 +173,13 @@ func (s safeWriter) Write(p []byte) (int, error) {
 }
 
 func onReady() {
+	log.Println("onReady called")
 	logs := NewLogBuffer(1000)
-	log.SetOutput(io.MultiWriter(logs, safeWriter{os.Stderr}))
+	writers := []io.Writer{logs, safeWriter{os.Stderr}}
+	if startupLog != nil {
+		writers = append(writers, startupLog)
+	}
+	log.SetOutput(io.MultiWriter(writers...))
 	log.SetFlags(log.Ltime)
 
 	tunnel := NewTunnel(appDataDir)
