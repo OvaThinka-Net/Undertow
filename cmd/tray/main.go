@@ -83,6 +83,16 @@ func (a *appState) doDisconnect() {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in main: %v", r)
+			if startupLog != nil {
+				startupLog.Sync()
+			}
+			os.Exit(1)
+		}
+	}()
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		log.Fatal(err)
@@ -97,21 +107,38 @@ func main() {
 	if startupLog != nil {
 		log.SetOutput(startupLog)
 		log.SetFlags(log.Ldate | log.Ltime)
-		log.Printf("Undertow starting, exe=%s", os.Args[0])
+		log.Printf("=== Undertow starting, exe=%s ===", os.Args[0])
+		startupLog.Sync()
 	}
 
 	// Wait briefly so the Windows shell (explorer.exe) is ready for
 	// Shell_NotifyIcon. Without this, systray.Run can fail silently
 	// when launched from the registry Run key at boot.
+	log.Println("Step 1: sleep 3s for shell ready")
+	if startupLog != nil {
+		startupLog.Sync()
+	}
 	time.Sleep(3 * time.Second)
 
 	// First-run: auto-copy config files from next to the binary
+	log.Println("Step 2: firstRunSetup")
+	if startupLog != nil {
+		startupLog.Sync()
+	}
 	firstRunSetup()
 
 	// Remove any leftover system proxy from previous versions
+	log.Println("Step 3: disableProxy")
+	if startupLog != nil {
+		startupLog.Sync()
+	}
 	disableProxy()
 
 	// Auto-enable start-at-login on first run
+	log.Println("Step 4: autostart check")
+	if startupLog != nil {
+		startupLog.Sync()
+	}
 	if !isAutoStartEnabled() {
 		if err := enableAutoStart(); err != nil {
 			log.Printf("Warning: failed to enable auto-start: %v", err)
@@ -120,9 +147,16 @@ func main() {
 		}
 	}
 	// Keep registry path in sync if the exe was moved
+	log.Println("Step 5: ensureAutoStartPath")
+	if startupLog != nil {
+		startupLog.Sync()
+	}
 	ensureAutoStartPath()
 
-	log.Println("Calling systray.Run...")
+	log.Println("Step 6: Calling systray.Run...")
+	if startupLog != nil {
+		startupLog.Sync()
+	}
 	systray.Run(onReady, onExit)
 	log.Println("systray.Run returned")
 }
