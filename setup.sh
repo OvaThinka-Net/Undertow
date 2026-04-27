@@ -1,11 +1,13 @@
 #!/bin/bash
-# Undertow — one-line remote setup script
-# Usage: curl -fsSL https://raw.githubusercontent.com/OvaThinka-Net/Undertow/main/setup.sh | sudo bash
+# Undertow — one-line remote setup & update script
+# Fresh install:  curl -fsSL https://raw.githubusercontent.com/OvaThinka-Net/Undertow/main/setup.sh | sudo bash
+# Pin a version:  curl -fsSL ... | sudo VERSION=v1.0.0 bash
 set -euo pipefail
 
-VERSION="v1.0.0"
 INSTALL_DIR="/opt/undertow"
-REPO="https://github.com/OvaThinka-Net/Undertow/releases/download"
+REPO_OWNER="OvaThinka-Net"
+REPO_NAME="Undertow"
+REPO_DL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download"
 
 echo ""
 echo "  ⚡ Undertow Setup"
@@ -15,6 +17,34 @@ echo ""
 if [[ $EUID -ne 0 ]]; then
     echo "  ERROR: This script must be run as root (use sudo)."
     exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Resolve version — use $VERSION env var, else fetch latest from GitHub API
+# ---------------------------------------------------------------------------
+if [[ -z "${VERSION:-}" ]]; then
+    echo "  Detecting latest release..."
+    if command -v curl &>/dev/null; then
+        VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest" | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+    elif command -v wget &>/dev/null; then
+        VERSION=$(wget -qO- "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest" | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+    else
+        echo "  ERROR: Neither curl nor wget found."; exit 1
+    fi
+    if [[ -z "$VERSION" ]]; then
+        echo "  ERROR: Could not determine latest version. Set VERSION manually:"
+        echo "    curl ... | sudo VERSION=v1.0.0 bash"
+        exit 1
+    fi
+fi
+
+# Detect if this is an update
+IS_UPDATE=false
+if [[ -d "$INSTALL_DIR" && -f "$INSTALL_DIR/server" ]]; then
+    IS_UPDATE=true
+    echo "  Mode: UPDATE to ${VERSION}"
+else
+    echo "  Mode: FRESH INSTALL ${VERSION}"
 fi
 
 # Detect architecture
@@ -28,16 +58,15 @@ case "$ARCH" in
 esac
 
 ZIP="undertow-linux-${ARCH}.zip"
-URL="${REPO}/${VERSION}/${ZIP}"
+URL="${REPO_DL}/${VERSION}/${ZIP}"
 TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 
 echo "  [1/5] Downloading ${ZIP}..."
-if command -v wget &>/dev/null; then
-    wget -q -O "$TMP/$ZIP" "$URL"
-elif command -v curl &>/dev/null; then
+if command -v curl &>/dev/null; then
     curl -fsSL -o "$TMP/$ZIP" "$URL"
-else
-    echo "  ERROR: Neither wget nor curl found."; exit 1
+elif command -v wget &>/dev/null; then
+    wget -q -O "$TMP/$ZIP" "$URL"
 fi
 
 echo "  [2/5] Extracting..."
@@ -47,24 +76,45 @@ if ! command -v unzip &>/dev/null; then
 fi
 unzip -qo "$TMP/$ZIP" -d "$TMP"
 
-echo "  [3/5] Installing to ${INSTALL_DIR}..."
+# ---------------------------------------------------------------------------
+# Stop running service before replacing binaries
+# ---------------------------------------------------------------------------
+if [[ "$IS_UPDATE" == true ]] && command -v systemctl &>/dev/null; then
+    if systemctl is-active --quiet undertow 2>/dev/null; then
+        echo "  [3/5] Stopping undertow service..."
+        systemctl stop undertow
+    else
+        echo "  [3/5] Service not running, skipping stop."
+    fi
+else
+    echo "  [3/5] Installing to ${INSTALL_DIR}..."
+fi
+
+# ---------------------------------------------------------------------------
+# Preserve config, credentials, logs, and client data
+# ---------------------------------------------------------------------------
+PRESERVE_FILES=(admin_config.json server_config.json client_config.json credentials.json credentials.json.token)
+PRESERVE_DIRS=(logs clients)
+
 if [[ -d "$INSTALL_DIR" ]]; then
-    # Preserve existing configs and tokens
-    for cfg in admin_config.json server_config.json credentials.json credentials.json.token; do
+    for cfg in "${PRESERVE_FILES[@]}"; do
         [[ -f "$INSTALL_DIR/$cfg" ]] && cp "$INSTALL_DIR/$cfg" "$TMP/$cfg.bak" 2>/dev/null || true
     done
-    # Preserve logs
-    [[ -d "$INSTALL_DIR/logs" ]] && cp -r "$INSTALL_DIR/logs" "$TMP/logs.bak" 2>/dev/null || true
+    for dir in "${PRESERVE_DIRS[@]}"; do
+        [[ -d "$INSTALL_DIR/$dir" ]] && cp -r "$INSTALL_DIR/$dir" "$TMP/$dir.bak" 2>/dev/null || true
+    done
     rm -rf "$INSTALL_DIR"
 fi
+
 mv "$TMP/undertow-linux-${ARCH}" "$INSTALL_DIR"
 
-# Restore configs and tokens
-for cfg in admin_config.json server_config.json credentials.json credentials.json.token; do
+# Restore preserved files
+for cfg in "${PRESERVE_FILES[@]}"; do
     [[ -f "$TMP/$cfg.bak" ]] && mv "$TMP/$cfg.bak" "$INSTALL_DIR/$cfg"
 done
-# Restore logs
-[[ -d "$TMP/logs.bak" ]] && mv "$TMP/logs.bak" "$INSTALL_DIR/logs"
+for dir in "${PRESERVE_DIRS[@]}"; do
+    [[ -d "$TMP/$dir.bak" ]] && mv "$TMP/$dir.bak" "$INSTALL_DIR/$dir"
+done
 
 echo "  [4/5] Running installer..."
 bash "$INSTALL_DIR/install.sh"
@@ -72,10 +122,12 @@ bash "$INSTALL_DIR/install.sh"
 echo "  [5/5] Starting service..."
 systemctl start undertow
 
-rm -rf "$TMP"
-
 IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'your-server-ip')
 echo ""
-echo "  ✅ Undertow is running!"
-echo "  Open http://${IP}:8090 and follow the setup wizard."
+if [[ "$IS_UPDATE" == true ]]; then
+    echo "  ✅ Undertow updated to ${VERSION} and restarted!"
+else
+    echo "  ✅ Undertow ${VERSION} is running!"
+    echo "  Open http://${IP}:8090 and follow the setup wizard."
+fi
 echo ""
