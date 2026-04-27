@@ -1126,8 +1126,10 @@ var knownPlatforms = []struct {
 }{
 	{"darwin-arm64-gui", "macOS GUI (Apple Silicon)", "Undertow-GUI-darwin-arm64"},
 	{"darwin-amd64-gui", "macOS GUI (Intel)", "Undertow-GUI-darwin-amd64"},
-	{"windows-amd64-web", "Windows GUI (x86_64)", "Undertow-Web-windows-amd64.exe"},
-	{"windows-arm64-web", "Windows GUI (ARM64)", "Undertow-Web-windows-arm64.exe"},
+	{"windows-amd64-gui", "Windows GUI (x86_64)", "Undertow-GUI-windows-amd64.exe"},
+	{"windows-arm64-gui", "Windows GUI (ARM64)", "Undertow-GUI-windows-arm64.exe"},
+	{"windows-amd64-web", "Windows Web GUI (x86_64)", "Undertow-Web-windows-amd64.exe"},
+	{"windows-arm64-web", "Windows Web GUI (ARM64)", "Undertow-Web-windows-arm64.exe"},
 	{"darwin-arm64-web", "macOS Web GUI (Apple Silicon)", "Undertow-Web-darwin-arm64"},
 	{"darwin-amd64-web", "macOS Web GUI (Intel)", "Undertow-Web-darwin-amd64"},
 	{"darwin-arm64", "macOS CLI (Apple Silicon)", "Undertow-darwin-arm64"},
@@ -1160,7 +1162,7 @@ func (pm *ProcessManager) handleClientPlatforms(w http.ResponseWriter, r *http.R
 	case strings.Contains(ua, "macintosh") || strings.Contains(ua, "mac os"):
 		suggested = "darwin-arm64-gui"
 	case strings.Contains(ua, "windows"):
-		suggested = "windows-amd64-web"
+		suggested = "windows-amd64-gui"
 	case strings.Contains(ua, "linux"):
 		suggested = "linux-amd64"
 	}
@@ -1272,7 +1274,7 @@ Edge/Chrome: Run with flag --proxy-server="socks5://127.0.0.1:1080"
 To disconnect: click "Disconnect" in the dashboard
 To quit: close the dashboard tab and press Ctrl+C in the background window (if visible)
 `, label, binFile)
-	} else if isTray {
+	} else if isTray && strings.Contains(platform, "darwin") {
 		readme = fmt.Sprintf(`Undertow Client
 ==================
 
@@ -1296,8 +1298,32 @@ All your internet traffic now goes through the tunnel.
 To disconnect: click the tray icon → "Disconnect"
 To quit: click the tray icon → "Quit"
 
+Auto-start: click the tray icon → "Start at Login"
 Config folder: ~/.undertow/
 `, label, binFile, binFile, binFile)
+	} else if isTray && strings.Contains(platform, "windows") {
+		readme = fmt.Sprintf(`Undertow Client
+==================
+
+Platform: %s
+
+Quick Start:
+1. Double-click %s to launch
+2. A tray icon (grey circle) appears in the Windows notification area
+3. Click it → "Connect"
+4. The icon turns green — you're connected!
+
+The app automatically sets your system SOCKS proxy.
+All your internet traffic now goes through the tunnel.
+
+To disconnect: click the tray icon → "Disconnect"
+To quit: click the tray icon → "Quit"
+
+Auto-start: click the tray icon → "Start at Login"
+  (adds to HKCU\Software\Microsoft\Windows\CurrentVersion\Run)
+Dashboard: click the tray icon → "Dashboard" to open the web UI
+Config folder: %%USERPROFILE%%\.undertow\
+`, label, binFile)
 	} else if strings.Contains(platform, "windows") {
 		readme = fmt.Sprintf(`Undertow Client
 ==================

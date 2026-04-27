@@ -95,9 +95,11 @@ func main() {
 	systray.Run(onReady, onExit)
 }
 
-// firstRunSetup copies credentials.json and client_config.json from the
-// directory containing the binary into ~/.undertow/ if they don't
-// already exist there. This means the user just unzips and double-clicks.
+// firstRunSetup copies credentials.json, token, and client_config.json from
+// the directory containing the binary into ~/.undertow/. Files next to the
+// binary are always the "source package" from the admin panel, so they
+// always overwrite what's in the data dir to keep things in sync when users
+// redeploy with a new server/project.
 func firstRunSetup() {
 	exePath, err := os.Executable()
 	if err != nil {
@@ -107,24 +109,25 @@ func firstRunSetup() {
 
 	filesToCopy := []string{"credentials.json", "credentials.json.token", "client_config.json"}
 	for _, name := range filesToCopy {
-		dst := filepath.Join(appDataDir, name)
-		if fileExists(dst) {
-			continue // already set up
-		}
 		src := filepath.Join(exeDir, name)
 		if !fileExists(src) {
 			continue
 		}
-		data, err := os.ReadFile(src)
+		dst := filepath.Join(appDataDir, name)
+		srcData, err := os.ReadFile(src)
 		if err != nil {
+			continue
+		}
+		// Skip copy if source and destination are identical
+		if dstData, err := os.ReadFile(dst); err == nil && bytes.Equal(srcData, dstData) {
 			continue
 		}
 		perm := os.FileMode(0644)
 		if name == "credentials.json" || name == "credentials.json.token" {
 			perm = 0600
 		}
-		if err := os.WriteFile(dst, data, perm); err == nil {
-			log.Printf("First run: copied %s to %s", name, appDataDir)
+		if err := os.WriteFile(dst, srcData, perm); err == nil {
+			log.Printf("Setup: synced %s → %s", name, appDataDir)
 		}
 	}
 }
