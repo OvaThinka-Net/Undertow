@@ -333,7 +333,9 @@ func startDashboard(tunnel *Tunnel, logs *LogBuffer, dataDir string) int {
 
 		for _, entry := range logs.Lines() {
 			data, _ := json.Marshal(entry)
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+				return
+			}
 		}
 		flusher.Flush()
 
@@ -347,10 +349,14 @@ func startDashboard(tunnel *Tunnel, logs *LogBuffer, dataDir string) int {
 			select {
 			case entry := <-ch:
 				data, _ := json.Marshal(entry)
-				fmt.Fprintf(w, "data: %s\n\n", data)
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+					return
+				}
 				flusher.Flush()
 			case <-ticker.C:
-				fmt.Fprintf(w, ": keepalive\n\n")
+				if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
+					return
+				}
 				flusher.Flush()
 			case <-r.Context().Done():
 				return
@@ -393,7 +399,6 @@ func startDashboard(tunnel *Tunnel, logs *LogBuffer, dataDir string) int {
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      120 * time.Second,
 	}
 	go srv.Serve(ln)
 	return port

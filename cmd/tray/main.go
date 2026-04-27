@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/png"
 	"io"
 	"log"
 	"math"
@@ -255,10 +254,10 @@ func onExit() {
 }
 
 func makeIcon(r, g, b uint8, filled bool) []byte {
-	const size = 22
+	const size = 64
 	img := image.NewRGBA(image.Rect(0, 0, size, size))
 	cx, cy := float64(size)/2, float64(size)/2
-	radius := float64(size)/2 - 2
+	radius := float64(size)/2 - 4
 
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
@@ -270,16 +269,14 @@ func makeIcon(r, g, b uint8, filled bool) []byte {
 					img.Set(x, y, color.RGBA{r, g, b, 255})
 				}
 			} else {
-				if dist <= radius && dist >= radius-1.8 {
+				if dist <= radius && dist >= radius-2.5 {
 					img.Set(x, y, color.RGBA{r, g, b, 200})
 				}
 			}
 		}
 	}
 
-	var buf bytes.Buffer
-	png.Encode(&buf, img)
-	return buf.Bytes()
+	return encodeIcon(img)
 }
 
 func fileExists(path string) bool {

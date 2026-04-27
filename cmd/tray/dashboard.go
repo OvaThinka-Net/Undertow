@@ -53,7 +53,6 @@ func (d *Dashboard) Start() error {
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      120 * time.Second,
 	}
 	go srv.Serve(ln)
 	return nil
@@ -125,7 +124,9 @@ func (d *Dashboard) handleLogs(w http.ResponseWriter, r *http.Request) {
 
 	for _, entry := range d.logs.Lines() {
 		data, _ := json.Marshal(entry)
-		fmt.Fprintf(w, "data: %s\n\n", data)
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+			return
+		}
 	}
 	flusher.Flush()
 
@@ -139,10 +140,14 @@ func (d *Dashboard) handleLogs(w http.ResponseWriter, r *http.Request) {
 		select {
 		case entry := <-ch:
 			data, _ := json.Marshal(entry)
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+				return
+			}
 			flusher.Flush()
 		case <-ticker.C:
-			fmt.Fprintf(w, ": keepalive\n\n")
+			if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
+				return
+			}
 			flusher.Flush()
 		case <-r.Context().Done():
 			return
