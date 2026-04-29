@@ -51,8 +51,8 @@ func NewEngine(backend storage.Backend, isClient bool, clientID string) *Engine 
 		closedSessions: make(map[string]time.Time),
 		processed:      make(map[string]time.Time),
 		// Default intervals: Poll (RX) fast for responsiveness, Flush (TX) tight for low latency
-		pollTicker:  500 * time.Millisecond,
-		flushTicker: 150 * time.Millisecond,
+		pollTicker:  200 * time.Millisecond,
+		flushTicker: 50 * time.Millisecond,
 	}
 	if isClient {
 		e.myDir = DirReq
@@ -70,7 +70,7 @@ func (e *Engine) SetRefreshRate(ms int) {
 	if ms > 0 {
 		e.pollTicker = time.Duration(ms) * time.Millisecond
 		// Legacy behavior: sets both if FlushTicker was still at default
-		if e.flushTicker == 150*time.Millisecond {
+		if e.flushTicker == 50*time.Millisecond {
 			e.flushTicker = time.Duration(ms) * time.Millisecond
 		}
 	}
@@ -403,7 +403,7 @@ func (e *Engine) pollLoop(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(50 * time.Millisecond):
+			case <-time.After(10 * time.Millisecond):
 			}
 			goto pollAgain
 		}

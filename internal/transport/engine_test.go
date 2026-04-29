@@ -185,9 +185,9 @@ func TestEngine_SetRates(t *testing.T) {
 		t.Errorf("pollTicker: got %v, want 100ms", e.pollTicker)
 	}
 
-	e.SetFlushRate(50)
-	if e.flushTicker != 50*time.Millisecond {
-		t.Errorf("flushTicker: got %v, want 50ms", e.flushTicker)
+	e.SetFlushRate(80)
+	if e.flushTicker != 80*time.Millisecond {
+		t.Errorf("flushTicker: got %v, want 80ms", e.flushTicker)
 	}
 
 	// SetPollRate with 0 should not change
@@ -201,7 +201,7 @@ func TestEngine_SetRefreshRate_Legacy(t *testing.T) {
 	mb := newMockBackend()
 	e := NewEngine(mb, true, "c1")
 
-	// At default flushTicker (150ms), SetRefreshRate should update both
+	// At default flushTicker (50ms), SetRefreshRate should update both
 	e.SetRefreshRate(200)
 	if e.pollTicker != 200*time.Millisecond {
 		t.Errorf("pollTicker: got %v, want 200ms", e.pollTicker)
