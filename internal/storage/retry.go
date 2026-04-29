@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -92,6 +93,9 @@ func (r *RetryBackend) Download(ctx context.Context, filename string) (io.ReadCl
 		rc, err := r.Inner.Download(ctx, filename)
 		if err == nil {
 			return rc, nil
+		}
+		if errors.Is(err, ErrNotFound) {
+			return nil, err // Don't retry 404s — file was already cleaned up
 		}
 		lastErr = err
 	}

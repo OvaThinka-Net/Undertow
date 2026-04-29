@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -316,6 +317,10 @@ func (e *Engine) pollLoop(ctx context.Context) {
 
 					rc, err := e.backend.Download(ctx, fname)
 					if err != nil {
+						if errors.Is(err, storage.ErrNotFound) {
+							// File was cleaned up before we could download — expected under load, not an error
+							return
+						}
 						log.Printf("download error %s: %v", fname, err)
 						e.processedMu.Lock()
 						delete(e.processed, fname) // failed to download, retry next poll

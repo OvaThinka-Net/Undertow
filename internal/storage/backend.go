@@ -2,8 +2,12 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
 )
+
+// ErrNotFound indicates the file no longer exists on the backend (e.g. 404).
+var ErrNotFound = errors.New("file not found")
 
 // Backend defines the interface for our pluggable storage mechanism that acts as the
 // covert transport layer.

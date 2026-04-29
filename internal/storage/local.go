@@ -42,7 +42,7 @@ func (b *LocalBackend) Upload(ctx context.Context, filename string, data io.Read
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	
+
 	if _, err := io.Copy(f, data); err != nil {
 		f.Close()
 		os.Remove(tmpPath)
@@ -81,7 +81,7 @@ func (b *LocalBackend) Download(ctx context.Context, filename string) (io.ReadCl
 	if err != nil {
 		// Differentiate between generic errors and not found
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("file not found: %s", filename)
+			return nil, fmt.Errorf("%w: %s", ErrNotFound, filename)
 		}
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}

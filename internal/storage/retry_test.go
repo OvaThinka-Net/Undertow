@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync/atomic"
@@ -172,5 +173,68 @@ func TestRetryBackend_ContextCancellation(t *testing.T) {
 	err := rb.Upload(ctx, "cancel-test.bin", bytes.NewReader([]byte("data")))
 	if err == nil {
 		t.Fatal("expected error on cancelled context")
+	}
+}
+
+func TestRetryBackend_DownloadNotFound_NoRetry(t *testing.T) {
+	lb, _ := setupTestBackend(t)
+	ctx := context.Background()
+
+	// Don't upload any file — download should get ErrNotFound immediately
+	rb := NewRetryBackend(lb)
+	_, err := rb.Download(ctx, "nonexistent.bin")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
+	}
+}
+
+func TestRetryBackend_DownloadTransientError_Retries(t *testing.T) {
+	lb, _ := setupTestBackend(t)
+	ctx := context.Background()
+
+	lb.Upload(ctx, "retry-dl.bin", bytes.NewReader([]byte("content")))
+
+	fb := &failNBackend{Backend: lb}
+	fb.downloadFails.Store(2) // Fail first 2, succeed on 3rd
+
+	rb := NewRetryBackend(fb)
+	rc, err := rb.Download(ctx, "retry-dl.bin")
+	if err != nil {
+		t.Fatalf("expected success after retries, got: %v", err)
+	}
+	defer rc.Close()
+	data, _ := io.ReadAll(rc)
+	if string(data) != "content" {
+		t.Errorf("got %q, want %q", string(data), "content")
+	}
+}
+
+func TestRetryBackend_BatchDelete(t *testing.T) {
+	lb, _ := setupTestBackend(t)
+	ctx := context.Background()
+
+	lb.Upload(ctx, "bd-1.bin", bytes.NewReader([]byte("a")))
+	lb.Upload(ctx, "bd-2.bin", bytes.NewReader([]byte("b")))
+
+	rb := NewRetryBackend(lb)
+	err := rb.BatchDelete(ctx, []string{"bd-1.bin", "bd-2.bin"})
+	if err != nil {
+		t.Fatalf("BatchDelete: %v", err)
+	}
+
+	files, _ := rb.ListQuery(ctx, "bd-")
+	if len(files) != 0 {
+		t.Errorf("expected 0 files after batch delete, got %d", len(files))
+	}
+}
+
+func TestRetryBackend_LoginPassthrough(t *testing.T) {
+	lb, _ := setupTestBackend(t)
+	rb := NewRetryBackend(lb)
+	if err := rb.Login(context.Background()); err != nil {
+		t.Fatalf("Login: %v", err)
 	}
 }

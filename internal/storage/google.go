@@ -356,7 +356,7 @@ func (b *GoogleBackend) Download(ctx context.Context, filename string) (io.ReadC
 	b.fileIdsMu.RUnlock()
 
 	if !ok {
-		return nil, fmt.Errorf("file-id mapping not found for %s", filename)
+		return nil, fmt.Errorf("%w: file-id mapping not found for %s", ErrNotFound, filename)
 	}
 
 	tok, err := b.getValidToken(ctx)
@@ -378,6 +378,9 @@ func (b *GoogleBackend) Download(ctx context.Context, filename string) (io.ReadC
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: %s", ErrNotFound, filename)
+		}
 		return nil, fmt.Errorf("download returned %d: %s", resp.StatusCode, string(body))
 	}
 
