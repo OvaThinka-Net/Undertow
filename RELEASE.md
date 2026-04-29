@@ -1,3 +1,22 @@
+## What's New in v1.1.0
+
+### DEFLATE Compression (backward-compatible)
+
+All traffic between client and server is now compressed using DEFLATE, delivering **3–4× more data per Google Drive API call**. Web content (HTML, CSS, JS, JSON) compresses 60–80%, meaning pages that previously required multiple round-trips through Drive now fit in one.
+
+**Impact:**
+- Faster page loads — more data per trip through the relay
+- Lower bandwidth usage on Google Drive quota
+- Zero configuration needed — works automatically
+
+**Backward-compatible upgrade path:**
+- Deploy the new server — it handles both old `.bin` and new `.zbin` files
+- Old clients keep working unchanged (no compression, no breakage)
+- New clients (downloadable from admin page) automatically use compression
+- No forced update — users upgrade at their own pace
+
+---
+
 Covert SOCKS5 tunnel that routes traffic through Google Drive as a steganographic transport layer. Web admin panel with setup wizard, client packaging, and native system tray app.
 
 **One-line install (Linux server):**

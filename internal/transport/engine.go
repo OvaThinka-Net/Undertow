@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"compress/flate"
 	"context"
 	"errors"
 	"fmt"
@@ -41,15 +42,20 @@ type Engine struct {
 	// Track processed files to avoid duplicates (value = insertion time for TTL eviction)
 	processed   map[string]time.Time
 	processedMu sync.Mutex
+
+	// Track which clients support compression (sent .zbin requests)
+	compressedClients   map[string]bool
+	compressedClientsMu sync.Mutex
 }
 
 func NewEngine(backend storage.Backend, isClient bool, clientID string) *Engine {
 	e := &Engine{
-		backend:        backend,
-		id:             clientID,
-		sessions:       make(map[string]*Session),
-		closedSessions: make(map[string]time.Time),
-		processed:      make(map[string]time.Time),
+		backend:           backend,
+		id:                clientID,
+		sessions:          make(map[string]*Session),
+		closedSessions:    make(map[string]time.Time),
+		processed:         make(map[string]time.Time),
+		compressedClients: make(map[string]bool),
 		// Default intervals: Poll (RX) fast for responsiveness, Flush (TX) tight for low latency
 		pollTicker:  200 * time.Millisecond,
 		flushTicker: 50 * time.Millisecond,
@@ -178,33 +184,59 @@ func (e *Engine) flushAll(ctx context.Context) {
 	}
 
 	for cid, mux := range muxes {
-		// Filename format: {dir}-{clientID}-mux-{timestamp}.bin
+		// Filename format: {dir}-{clientID}-mux-{timestamp}.bin or .zbin
 		fnameCID := cid
 		if fnameCID == "" {
 			fnameCID = "unknown"
 		}
-		filename := fmt.Sprintf("%s-%s-mux-%d.bin", e.myDir, fnameCID, time.Now().UnixNano())
+
+		// Determine whether to compress:
+		// - Client (DirReq) always writes compressed .zbin (signals capability)
+		// - Server (DirRes) writes .zbin only if that client sent .zbin requests
+		useCompression := false
+		if e.myDir == DirReq {
+			useCompression = true
+		} else {
+			e.compressedClientsMu.Lock()
+			useCompression = e.compressedClients[fnameCID]
+			e.compressedClientsMu.Unlock()
+		}
+
+		ext := ".bin"
+		if useCompression {
+			ext = ".zbin"
+		}
+		filename := fmt.Sprintf("%s-%s-mux-%d%s", e.myDir, fnameCID, time.Now().UnixNano(), ext)
 
 		// Upload asynchronously with backpressure/limit
-		go func(fname string, m []Envelope) {
+		go func(fname string, m []Envelope, compress bool) {
 			e.sem <- struct{}{}        // Acquire
 			defer func() { <-e.sem }() // Release
 
 			pr, pw := io.Pipe()
 			go func() {
 				defer pw.Close()
+				var w io.Writer = pw
+				var fw *flate.Writer
+				if compress {
+					fw, _ = flate.NewWriter(pw, flate.BestSpeed)
+					w = fw
+				}
 				for _, env := range m {
-					if err := env.Encode(pw); err != nil {
+					if err := env.Encode(w); err != nil {
 						log.Printf("mux encode error: %v", err)
 						break
 					}
+				}
+				if fw != nil {
+					fw.Close()
 				}
 			}()
 
 			if err := e.backend.Upload(ctx, fname, pr); err != nil {
 				log.Printf("upload error %s: %v", fname, err)
 			}
-		}(filename, mux)
+		}(filename, mux, useCompression)
 	}
 
 	for _, id := range closedSessionIDs {
@@ -289,6 +321,7 @@ func (e *Engine) pollLoop(ctx context.Context) {
 				parts := strings.Split(f, "-")
 				if len(parts) >= 3 {
 					tsStr := parts[len(parts)-1]
+					tsStr = strings.TrimSuffix(tsStr, ".zbin")
 					tsStr = strings.TrimSuffix(tsStr, ".bin")
 					ts, _ := strconv.ParseInt(tsStr, 10, 64)
 					if ts > 0 && time.Since(time.Unix(0, ts)) > 5*time.Minute {
@@ -336,11 +369,27 @@ func (e *Engine) pollLoop(ctx context.Context) {
 						fileClientID = parts[1]
 					}
 
+					// Detect compression from filename extension
+					isCompressed := strings.HasSuffix(fname, ".zbin")
+
+					// Server: track that this client supports compression
+					if isCompressed && e.myDir == DirRes && fileClientID != "" {
+						e.compressedClientsMu.Lock()
+						e.compressedClients[fileClientID] = true
+						e.compressedClientsMu.Unlock()
+					}
+
+					// Set up reader: decompress if .zbin
+					var reader io.Reader = rc
+					if isCompressed {
+						reader = flate.NewReader(rc)
+					}
+
 					// STREAMING DECODE
 					count := 0
 					for {
 						var env Envelope
-						if err := env.Decode(rc); err != nil {
+						if err := env.Decode(reader); err != nil {
 							if err != io.EOF && err != io.ErrUnexpectedEOF {
 								log.Printf("mux decode error %s: %v", fname, err)
 							}
@@ -467,6 +516,7 @@ func (e *Engine) cleanupLoop(ctx context.Context) {
 				if len(parts) >= 3 {
 					tsStr := parts[len(parts)-1]
 					tsStr = strings.TrimSuffix(tsStr, ".json")
+					tsStr = strings.TrimSuffix(tsStr, ".zbin")
 					tsStr = strings.TrimSuffix(tsStr, ".bin")
 					ts, err := strconv.ParseInt(tsStr, 10, 64)
 					if err == nil {

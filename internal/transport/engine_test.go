@@ -2,8 +2,10 @@ package transport
 
 import (
 	"bytes"
+	"compress/flate"
 	"context"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -240,13 +242,19 @@ func TestEngine_FlushAll_UploadsData(t *testing.T) {
 		t.Fatalf("expected 1 upload, got %d", len(uploads))
 	}
 
-	// Verify the uploaded file contains our envelope
+	// Client writes .zbin (compressed)
+	if !strings.HasSuffix(uploads[0], ".zbin") {
+		t.Fatalf("expected .zbin file, got: %s", uploads[0])
+	}
+
+	// Verify the uploaded file contains our envelope (decompress first)
 	mb.mu.Lock()
 	data := mb.files[uploads[0]]
 	mb.mu.Unlock()
 
+	fr := flate.NewReader(bytes.NewReader(data))
 	var env Envelope
-	err := env.Decode(bytes.NewReader(data))
+	err := env.Decode(fr)
 	if err != nil {
 		t.Fatalf("Decode uploaded data: %v", err)
 	}
@@ -331,16 +339,16 @@ func TestEngine_FlushAll_MultipleSessionsMuxed(t *testing.T) {
 		t.Fatalf("expected 1 mux upload for same client, got %d", len(uploads))
 	}
 
-	// Decode both envelopes from the mux file
+	// Decode both envelopes from the mux file (client writes .zbin)
 	mb.mu.Lock()
 	data := mb.files[uploads[0]]
 	mb.mu.Unlock()
 
 	ids := make(map[string]bool)
-	reader := bytes.NewReader(data)
+	fr := flate.NewReader(bytes.NewReader(data))
 	for {
 		var env Envelope
-		if err := env.Decode(reader); err != nil {
+		if err := env.Decode(fr); err != nil {
 			break
 		}
 		ids[env.SessionID] = true
@@ -612,4 +620,305 @@ func intToStr(n int64) string {
 		digits[i], digits[j] = digits[j], digits[i]
 	}
 	return string(digits)
+}
+
+// --- Compression Tests ---
+
+func TestEngine_FlushAll_ClientWritesZbin(t *testing.T) {
+	mb := newMockBackend()
+	e := NewEngine(mb, true, "client-1")
+
+	s := NewSession("comp-sess")
+	s.TargetAddr = "example.com:443"
+	e.AddSession(s)
+	s.EnqueueTx([]byte("compress me"))
+
+	e.flushAll(context.Background())
+	time.Sleep(200 * time.Millisecond)
+
+	uploads := mb.getUploads()
+	if len(uploads) != 1 {
+		t.Fatalf("expected 1 upload, got %d", len(uploads))
+	}
+
+	// Client should always write .zbin
+	if !strings.HasSuffix(uploads[0], ".zbin") {
+		t.Errorf("client should write .zbin, got filename: %s", uploads[0])
+	}
+
+	// Verify we can decompress and decode the envelope
+	mb.mu.Lock()
+	data := mb.files[uploads[0]]
+	mb.mu.Unlock()
+
+	fr := flate.NewReader(bytes.NewReader(data))
+	var env Envelope
+	err := env.Decode(fr)
+	if err != nil {
+		t.Fatalf("failed to decode compressed envelope: %v", err)
+	}
+	if env.SessionID != "comp-sess" {
+		t.Errorf("SessionID: got %q, want %q", env.SessionID, "comp-sess")
+	}
+	if string(env.Payload) != "compress me" {
+		t.Errorf("Payload: got %q, want %q", env.Payload, "compress me")
+	}
+}
+
+func TestEngine_FlushAll_ServerWritesBinForLegacyClient(t *testing.T) {
+	mb := newMockBackend()
+	e := NewEngine(mb, false, "")
+
+	s := NewSession("legacy-sess")
+	s.ClientID = "old-client"
+	s.TargetAddr = "example.com:80"
+	e.AddSession(s)
+	s.EnqueueTx([]byte("response data"))
+
+	// Don't mark old-client as compressed — server should write .bin
+	e.flushAll(context.Background())
+	time.Sleep(200 * time.Millisecond)
+
+	uploads := mb.getUploads()
+	if len(uploads) != 1 {
+		t.Fatalf("expected 1 upload, got %d", len(uploads))
+	}
+
+	if !strings.HasSuffix(uploads[0], ".bin") {
+		t.Errorf("server should write .bin for legacy client, got: %s", uploads[0])
+	}
+
+	// Verify it's readable without decompression
+	mb.mu.Lock()
+	data := mb.files[uploads[0]]
+	mb.mu.Unlock()
+
+	var env Envelope
+	err := env.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("failed to decode uncompressed envelope: %v", err)
+	}
+	if string(env.Payload) != "response data" {
+		t.Errorf("Payload: got %q, want %q", env.Payload, "response data")
+	}
+}
+
+func TestEngine_FlushAll_ServerWritesZbinForCompressedClient(t *testing.T) {
+	mb := newMockBackend()
+	e := NewEngine(mb, false, "")
+
+	s := NewSession("new-sess")
+	s.ClientID = "new-client"
+	s.TargetAddr = "example.com:443"
+	e.AddSession(s)
+	s.EnqueueTx([]byte("compressed response"))
+
+	// Mark new-client as compression-capable
+	e.compressedClientsMu.Lock()
+	e.compressedClients["new-client"] = true
+	e.compressedClientsMu.Unlock()
+
+	e.flushAll(context.Background())
+	time.Sleep(200 * time.Millisecond)
+
+	uploads := mb.getUploads()
+	if len(uploads) != 1 {
+		t.Fatalf("expected 1 upload, got %d", len(uploads))
+	}
+
+	if !strings.HasSuffix(uploads[0], ".zbin") {
+		t.Errorf("server should write .zbin for compressed client, got: %s", uploads[0])
+	}
+
+	// Verify we can decompress it
+	mb.mu.Lock()
+	data := mb.files[uploads[0]]
+	mb.mu.Unlock()
+
+	fr := flate.NewReader(bytes.NewReader(data))
+	var env Envelope
+	err := env.Decode(fr)
+	if err != nil {
+		t.Fatalf("failed to decode compressed envelope: %v", err)
+	}
+	if string(env.Payload) != "compressed response" {
+		t.Errorf("Payload: got %q, want %q", env.Payload, "compressed response")
+	}
+}
+
+func TestEngine_PollLoop_DecompressesZbin(t *testing.T) {
+	mb := newMockBackend()
+
+	// Create a client engine that polls for "res-client1-" files
+	e := NewEngine(mb, true, "client1")
+
+	// Pre-upload a compressed .zbin file
+	var buf bytes.Buffer
+	fw, _ := flate.NewWriter(&buf, flate.BestSpeed)
+	env := Envelope{
+		SessionID:  "zbin-sess",
+		Seq:        0,
+		TargetAddr: "target.com:443",
+		Payload:    []byte("compressed payload"),
+	}
+	env.Encode(fw)
+	fw.Close()
+
+	ts := time.Now().UnixNano()
+	filename := "res-client1-mux-" + intToStr(ts) + ".zbin"
+	mb.Upload(context.Background(), filename, bytes.NewReader(buf.Bytes()))
+
+	// Add the session so ProcessRx works
+	s := NewSession("zbin-sess")
+	e.AddSession(s)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e.SetPollRate(50)
+	e.SetFlushRate(5000)
+	e.Start(ctx)
+
+	// Wait for poll to process
+	select {
+	case data := <-s.RxChan:
+		if string(data) != "compressed payload" {
+			t.Errorf("got %q, want %q", data, "compressed payload")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for decompressed rx data")
+	}
+}
+
+func TestEngine_PollLoop_StillReadsBinFiles(t *testing.T) {
+	mb := newMockBackend()
+
+	// Client engine
+	e := NewEngine(mb, true, "client2")
+
+	// Pre-upload an uncompressed .bin file (legacy format)
+	var buf bytes.Buffer
+	env := Envelope{
+		SessionID:  "bin-sess",
+		Seq:        0,
+		TargetAddr: "legacy.com:80",
+		Payload:    []byte("uncompressed payload"),
+	}
+	env.Encode(&buf)
+
+	ts := time.Now().UnixNano()
+	filename := "res-client2-mux-" + intToStr(ts) + ".bin"
+	mb.Upload(context.Background(), filename, bytes.NewReader(buf.Bytes()))
+
+	s := NewSession("bin-sess")
+	e.AddSession(s)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e.SetPollRate(50)
+	e.SetFlushRate(5000)
+	e.Start(ctx)
+
+	select {
+	case data := <-s.RxChan:
+		if string(data) != "uncompressed payload" {
+			t.Errorf("got %q, want %q", data, "uncompressed payload")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for uncompressed rx data")
+	}
+}
+
+func TestEngine_PollLoop_ServerTracksCompressedClient(t *testing.T) {
+	mb := newMockBackend()
+
+	// Server engine
+	e := NewEngine(mb, false, "")
+
+	var newSessionCalled bool
+	var mu sync.Mutex
+	e.OnNewSession = func(sessionID, targetAddr string, s *Session) {
+		mu.Lock()
+		newSessionCalled = true
+		mu.Unlock()
+	}
+
+	// Upload a .zbin request from "newclient"
+	var buf bytes.Buffer
+	fw, _ := flate.NewWriter(&buf, flate.BestSpeed)
+	env := Envelope{
+		SessionID:  "track-sess",
+		Seq:        0,
+		TargetAddr: "target.com:443",
+		Payload:    []byte("hello"),
+	}
+	env.Encode(fw)
+	fw.Close()
+
+	ts := time.Now().UnixNano()
+	filename := "req-newclient-mux-" + intToStr(ts) + ".zbin"
+	mb.Upload(context.Background(), filename, bytes.NewReader(buf.Bytes()))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e.SetPollRate(50)
+	e.SetFlushRate(5000)
+	e.Start(ctx)
+
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	called := newSessionCalled
+	mu.Unlock()
+	if !called {
+		t.Fatal("OnNewSession should have been called")
+	}
+
+	// Verify server tracked "newclient" as compression-capable
+	e.compressedClientsMu.Lock()
+	isCompressed := e.compressedClients["newclient"]
+	e.compressedClientsMu.Unlock()
+
+	if !isCompressed {
+		t.Error("server should track 'newclient' as compression-capable after receiving .zbin")
+	}
+}
+
+func TestEngine_PollLoop_ServerDoesNotTrackBinClient(t *testing.T) {
+	mb := newMockBackend()
+
+	// Server engine
+	e := NewEngine(mb, false, "")
+
+	e.OnNewSession = func(sessionID, targetAddr string, s *Session) {}
+
+	// Upload a .bin request from "legacyclient"
+	var buf bytes.Buffer
+	env := Envelope{
+		SessionID:  "legacy-track",
+		Seq:        0,
+		TargetAddr: "old.com:80",
+		Payload:    []byte("old hello"),
+	}
+	env.Encode(&buf)
+
+	ts := time.Now().UnixNano()
+	filename := "req-legacyclient-mux-" + intToStr(ts) + ".bin"
+	mb.Upload(context.Background(), filename, bytes.NewReader(buf.Bytes()))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e.SetPollRate(50)
+	e.SetFlushRate(5000)
+	e.Start(ctx)
+
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify server did NOT track "legacyclient" as compressed
+	e.compressedClientsMu.Lock()
+	isCompressed := e.compressedClients["legacyclient"]
+	e.compressedClientsMu.Unlock()
+
+	if isCompressed {
+		t.Error("server should NOT mark 'legacyclient' as compressed from .bin file")
+	}
 }
